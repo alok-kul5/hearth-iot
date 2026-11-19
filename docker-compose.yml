@@ -1,0 +1,41 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "3"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+    ports:
+      - "8000:8000"
+    volumes:
+      - readings:/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+  simulator:
+    build: ./simulator
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      PUBLISH_INTERVAL: 2
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data:
+  readings:

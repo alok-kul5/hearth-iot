@@ -1,0 +1,46 @@
+# Threshold alert rules.
+#
+# A rule fires when `value <op> threshold` holds for at least `for_seconds`
+# (0 = immediately). It resolves on its own once a reading is back in range.
+# `{value}` and `{threshold}` in the message are filled in when the alert opens.
+
+stale_after_seconds: 30   # a sensor with no reading for this long is reported offline
+
+rules:
+  - name: high_temperature
+    sensor_type: temperature
+    op: ">"
+    threshold: 30
+    severity: critical
+    message: "Temperature is {value}°C (above {threshold}°C)"
+
+  - name: low_temperature
+    sensor_type: temperature
+    op: "<"
+    threshold: 15
+    severity: warning
+    message: "Temperature is {value}°C (below {threshold}°C)"
+
+  - name: high_humidity
+    sensor_type: humidity
+    op: ">"
+    threshold: 70
+    for_seconds: 6
+    severity: warning
+    message: "Humidity is {value}% (above {threshold}%)"
+
+  - name: low_humidity
+    sensor_type: humidity
+    op: "<"
+    threshold: 25
+    for_seconds: 6
+    severity: warning
+    message: "Humidity is {value}% (below {threshold}%)"
+
+  - name: door_left_open
+    sensor_type: door
+    op: "=="
+    threshold: 1
+    for_seconds: 60
+    severity: warning
+    message: "Door has been open for over a minute"
