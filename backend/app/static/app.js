@@ -165,7 +165,7 @@ function renderPlan() {
     } else {
       body = `<text class="room-name" x="${x}" y="${r.y + (C ? 30 : 26)}">${r.label}</text>`;
     }
-    out += `<g class="room ${alerting ? "alerting" : ""} ${selected ? "selected" : ""}" data-sensor="${primary?.sensor_id ?? ""}" tabindex="${primary ? 0 : -1}" role="button" aria-label="${r.label}${primary ? ": " + fmtValue(primary).text : ""}">
+    out += `<g class="room ${alerting ? "alerting" : ""} ${selected ? "selected" : ""}" data-room="${key}" data-sensor="${primary?.sensor_id ?? ""}" tabindex="${primary ? 0 : -1}" role="button" aria-label="${r.label}${primary ? ": " + fmtValue(primary).text : ""}">
       <rect class="floor" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"/>
       <rect class="edge" x="${r.x + 0.75}" y="${r.y + 0.75}" width="${r.w - 1.5}" height="${r.h - 1.5}" rx="13.5"/>
       ${body}</g>`;
@@ -177,8 +177,10 @@ function renderPlan() {
     const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
     const [hx, hy] = d.hinge;
     const swing = `M ${d.x2} ${d.y2} A ${len} ${len} 0 0 ${d.swing > 0 ? 1 : 0} ${hx} ${hy + d.swing * -len}`;
+    const angle = open ? d.swing * 72 : 0;
     out += `<path class="door-swing ${open ? "open" : ""}" d="${swing}"/>
-      <line class="door ${open ? "open" : ""} ${bad.has(id) ? "alerting" : ""}" x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}"><title>${sensorName(s)}: ${fmtValue(s).text}</title></line>`;
+      <line class="door-frame" x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}"/>
+      <line class="door ${open ? "open" : ""} ${bad.has(id) ? "alerting" : ""}" x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}" style="transform-origin: ${hx}px ${hy}px; transform: rotate(${angle}deg)"><title>${sensorName(s)}: ${fmtValue(s).text}</title></line>`;
   }
   patch(svg, out, true);
   svg.querySelectorAll(".room[data-sensor]").forEach((g) => {
@@ -203,7 +205,13 @@ function renderSummary() {
     const more = alerts.length > 1 ? ` and ${alerts.length - 1} more` : "";
     text = `<strong>${reporting}.</strong> <span class="bad">${alerts.length} alert${alerts.length > 1 ? "s" : ""}</span>: ${esc(s ? sensorName(s) : a.sensor_id)} ${esc(alertText(a))} since ${time(a.opened_at)}${more}.`;
   }
-  $("#summary").innerHTML = text;
+  const sum = $("#summary");
+  const shape = `${online}/${all.length}/${alerts.length}`;
+  if (sum.innerHTML !== text) {
+    sum.innerHTML = text;
+    if (sum.dataset.shape !== shape && sum.dataset.shape && !reduced()) sum.animate([{ opacity: 0.2, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 500, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+    sum.dataset.shape = shape;
+  }
   $("#scope").textContent = `${all.length} sensors · ${new Set(all.map((s) => s.room)).size} rooms`;
   $("#online-count").textContent = `${online} of ${all.length} online`;
 }
@@ -211,7 +219,9 @@ function renderSummary() {
 /* ── Alerts ────────────────────────────────────────────── */
 function renderAlerts() {
   const list = [...state.active.values()].sort((a, b) => b.opened_at - a.opened_at);
-  $("#alert-count").textContent = list.length;
+  const badge = $("#alert-count");
+  if (badge.textContent !== String(list.length) && !reduced()) badge.animate([{ transform: "scale(1.35)" }, { transform: "scale(1)" }], { duration: 450, easing: "cubic-bezier(0.34, 1.6, 0.64, 1)" });
+  badge.textContent = list.length;
   $("#alert-count").classList.toggle("hot", list.length > 0);
   if (!list.length) {
     $("#alerts").innerHTML = `<li class="all-clear"><strong>Nothing needs attention</strong>Every sensor is reporting and in range.</li>`;
@@ -341,6 +351,8 @@ function renderChart() {
   renderChart.drawIn = false;
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(sensorName(s))} over the last ${state.minutes} minutes">
     ${grid}${xl}${thrLine}${area}<path class="line" d="${d}"/>
+    <circle class="live-ring" cx="${X(x1)}" cy="${Y(pts[pts.length - 1].value)}" r="5" style="animation-delay: -${((performance.now() % 1800) / 1000).toFixed(2)}s"/>
+    <circle class="live-head" cx="${X(x1)}" cy="${Y(pts[pts.length - 1].value)}" r="4"/>
     <line class="cursor" y1="${T}" y2="${H - B}" hidden/><circle class="dot" r="4" hidden/></svg>`;
   const svg = el.querySelector("svg"), cur = svg.querySelector(".cursor"), dot = svg.querySelector(".dot"), tip = $("#tooltip");
   if (drawIn) {
@@ -409,10 +421,43 @@ function select(id) {
 }
 
 /* ── Live updates ──────────────────────────────────────── */
+const lastPacket = { t: 0 }, lastFlash = new Map();
+function pulseReading(r) {
+  if (reduced()) return;
+  // Each room flashes at most once every 2.5 s, from a violet tint back to its own resting colour.
+  const g = document.querySelector(`#plan .room[data-room="${r.room}"]`);
+  const nowMs = performance.now();
+  if (g && nowMs - (lastFlash.get(r.room) ?? 0) > 2500) {
+    lastFlash.set(r.room, nowMs);
+    const rest = g.classList.contains("alerting") ? "#3a1824" : g.classList.contains("selected") ? "#2c2639" : "#221d2e";
+    g.querySelector("rect.floor").animate([{ fill: "#34295a" }, { fill: rest }], { duration: 650, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  }
+  const row = document.querySelector(`#sensors button[data-id="${r.sensor_id}"]`);
+  if (row && row.getAttribute("aria-current") !== "true" && nowMs - (lastFlash.get(r.sensor_id) ?? 0) > 2500) {
+    lastFlash.set(r.sensor_id, nowMs);
+    row.animate([{ backgroundColor: "#b48cff1f" }, { backgroundColor: "#b48cff00" }], { duration: 650, easing: "ease-out" });
+  }
+  const val = row?.querySelector(".val");
+  if (val) val.animate([{ transform: "translateY(-3px)", opacity: 0.4 }, { transform: "none", opacity: 1 }], { duration: 420, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  // A packet travels along the data path, at most one every 120 ms.
+  const now = performance.now();
+  if (now - lastPacket.t > 120) {
+    lastPacket.t = now;
+    document.querySelectorAll(".pipeline .flow").forEach((svg, i) => {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("r", "2.6"); dot.setAttribute("cy", "4"); dot.setAttribute("class", "packet");
+      svg.appendChild(dot);
+      dot.animate([{ cx: 2, opacity: 0 }, { cx: 10, opacity: 1, offset: 0.2 }, { cx: 46, opacity: 0 }],
+        { duration: 700, delay: i * 520, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "both" }).onfinish = () => dot.remove();
+    });
+  }
+}
+
 function onReading(r) {
   const prev = state.sensors.get(r.sensor_id) ?? {};
   state.sensors.set(r.sensor_id, { ...prev, ...r, last_value: r.value, last_ts: r.ts, online: true });
   state.messages.push(Date.now());
+  requestAnimationFrame(() => pulseReading(r));
   if (r.sensor_id === state.selected) {
     state.points.push({ ts: r.ts, value: r.value });
     const cutoff = Date.now() / 1000 - state.minutes * 60;
@@ -521,7 +566,12 @@ document.querySelectorAll(".card").forEach((c) => {
     const r = c.getBoundingClientRect();
     c.style.setProperty("--mx", `${e.clientX - r.left}px`);
     c.style.setProperty("--my", `${e.clientY - r.top}px`);
+    if (reduced()) return;
+    const px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
+    c.style.setProperty("--ry", `${(px * 3).toFixed(2)}deg`);
+    c.style.setProperty("--rx", `${(-py * 3).toFixed(2)}deg`);
   });
+  c.addEventListener("pointerleave", () => { c.style.setProperty("--rx", "0deg"); c.style.setProperty("--ry", "0deg"); });
 });
 document.querySelectorAll(".title-row, .card").forEach((el, i) => el.style.setProperty("--i", i));
 document.body.classList.add("enter");

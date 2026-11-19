@@ -50,13 +50,21 @@ body {
   color: var(--text);
   font: 400 var(--fs-body)/1.45 "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* The owner's purple night sky: two soft glows over near-black, fixed so cards scroll over it. */
+  background: var(--ground);
+}
+/* The owner's purple night sky: soft glows on a fixed layer that drifts and breathes slowly. */
+body::before {
+  content: ""; position: fixed; inset: -12%; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(1200px 700px at 10% -10%, color-mix(in srgb, var(--ground-glow-1) 85%, transparent), transparent 70%),
-    radial-gradient(1000px 640px at 105% 4%, color-mix(in srgb, var(--ground-glow-2) 60%, transparent), transparent 70%),
-    radial-gradient(1100px 700px at 50% 115%, color-mix(in srgb, var(--ground-glow-1) 45%, transparent), transparent 70%),
-    var(--ground);
-  background-attachment: fixed;
+    radial-gradient(1200px 700px at 10% 0%, color-mix(in srgb, var(--ground-glow-1) 85%, transparent), transparent 70%),
+    radial-gradient(1000px 640px at 100% 10%, color-mix(in srgb, var(--ground-glow-2) 60%, transparent), transparent 70%),
+    radial-gradient(1100px 700px at 50% 110%, color-mix(in srgb, var(--ground-glow-1) 45%, transparent), transparent 70%);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.9; }
+  50% { transform: translate3d(3%, 2%, 0) scale(1.06); opacity: 1; }
+  100% { transform: translate3d(-3%, 1%, 0) scale(1.02); opacity: 0.85; }
 }
 h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 p { margin: 0; }
@@ -299,3 +307,28 @@ body.enter .title-row, body.enter .card { animation: rise 0.8s var(--ease) both;
 .plan.compact .room .reading { font-size: 40px; }
 .plan.compact .room .reading tspan.unit { font-size: 22px; }
 .plan.compact .room .sub { font-size: 19px; }
+
+/* ── Motion, part two ──────────────────────────────────── */
+.card { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px)); transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s var(--ease); will-change: transform; }
+.card:hover { --lift: -3px; transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift)); }
+body.enter .title-row, body.enter .card { animation: rise-blur 0.9s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
+@keyframes rise-blur { from { opacity: 0; transform: translateY(26px) scale(0.97); filter: blur(8px); } to { opacity: 1; transform: none; filter: blur(0); } }
+.door { transition: transform 0.9s cubic-bezier(0.34, 1.25, 0.64, 1), stroke 0.4s var(--ease); }
+.door-frame { stroke: var(--rule); stroke-width: 5; stroke-linecap: round; }
+.room.alerting rect.edge { animation: alarm 1.8s ease-in-out infinite; }
+@keyframes alarm { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.25; } }
+.room.alerting .reading.bad { animation: alarm-text 1.8s ease-in-out infinite; }
+@keyframes alarm-text { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+.packet { fill: var(--data); }
+.chart .live-head { fill: var(--data); }
+.chart .live-ring { fill: none; stroke: var(--data); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: live-ring 1.8s var(--ease) infinite; }
+@keyframes live-ring { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(3); opacity: 0; } }
+.lead-value { transition: color 0.4s var(--ease); }
+.pill.critical { animation: alarm-text 1.8s ease-in-out infinite; }
+.brand .mark { transition: transform 0.5s cubic-bezier(0.34, 1.5, 0.64, 1); }
+.brand:hover .mark { transform: rotate(-8deg) scale(1.1); }
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .card, .card:hover { transform: none; }
+  body.enter .title-row, body.enter .card { animation: none; }
+}
