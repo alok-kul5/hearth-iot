@@ -1,56 +1,121 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-IN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>Home Sensors</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <header class="top">
-    <div>
-      <h1>Home Sensors</h1>
-      <p class="sub">Live readings over MQTT</p>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Home Sensors">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M5 15.5 16 6l11 9.5V26a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M11.5 19.5a6.4 6.4 0 0 1 9 0M13.8 22.2a3.2 3.2 0 0 1 4.4 0" fill="none" stroke="var(--data)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="24.6" r="1.4" fill="var(--data)"/>
+      </svg>
+      <span class="brand-name">Home Sensors</span>
+    </a>
+    <span class="scope" id="scope">8 sensors · 6 rooms</span>
+
+    <div class="pipeline" aria-label="Data path from sensors to this screen">
+      <span>Sensors</span>
+      <svg class="flow" viewBox="0 0 48 8" aria-hidden="true"><path d="M2 4h44"/></svg>
+      <span>Mosquitto</span>
+      <svg class="flow" viewBox="0 0 48 8" aria-hidden="true"><path d="M2 4h44"/></svg>
+      <span>Backend</span>
+      <span class="rate" id="rate">– msg/min</span>
     </div>
-    <div class="status" id="status"><span class="dot"></span><span id="status-text">Connecting…</span></div>
+
+    <div class="status" id="status" role="status">
+      <span class="lamp" aria-hidden="true"></span>
+      <span id="status-text">Connecting</span>
+    </div>
   </header>
 
-  <main>
-    <section aria-labelledby="alerts-h" class="panel alerts-panel">
-      <div class="panel-head">
-        <h2 id="alerts-h">Active alerts</h2>
-        <span class="count" id="alert-count">0</span>
+  <main class="canvas">
+    <section class="title-row" aria-labelledby="page-title">
+      <div>
+        <h1 id="page-title">Home overview</h1>
+        <p class="summary" id="summary">Waiting for the first readings.</p>
       </div>
-      <ul id="alerts" class="alerts"><li class="empty">No active alerts</li></ul>
+      <p class="stamp" id="stamp"></p>
     </section>
 
-    <section aria-labelledby="sensors-h">
-      <h2 id="sensors-h" class="section-title">Sensors</h2>
-      <div id="sensors" class="grid"></div>
-    </section>
+    <div class="grid">
+      <section class="card plan-card span-8" aria-labelledby="plan-h">
+        <header class="card-head">
+          <h2 id="plan-h">Floor plan</h2>
+          <p class="card-meta">Select a room to see its history</p>
+        </header>
+        <svg id="plan" class="plan" viewBox="-6 -6 612 372" role="img" aria-label="Floor plan with live sensor readings"></svg>
+      </section>
 
-    <section aria-labelledby="chart-h" class="panel">
-      <div class="panel-head">
-        <h2 id="chart-h">History: <span id="chart-title">pick a sensor</span></h2>
-        <div class="ranges" role="group" aria-label="Time range">
-          <button data-min="5">5m</button>
-          <button data-min="15" class="on">15m</button>
-          <button data-min="60">1h</button>
-          <button data-min="360">6h</button>
+      <div class="stack span-4">
+      <section class="card alerts-card" aria-labelledby="alerts-h">
+        <header class="card-head">
+          <h2 id="alerts-h">Needs attention</h2>
+          <span class="count" id="alert-count">0</span>
+        </header>
+        <ul class="alerts" id="alerts"></ul>
+      </section>
+      <section class="card" aria-labelledby="rules-h">
+        <header class="card-head">
+          <h2 id="rules-h">Alert rules</h2>
+          <p class="card-meta">From rules.yaml</p>
+        </header>
+        <ul class="rules" id="rules"></ul>
+      </section>
+      </div>
+
+      <section class="card span-8" aria-labelledby="chart-h">
+        <header class="card-head">
+          <div>
+            <h2 id="chart-h">History</h2>
+            <p class="card-meta" id="chart-sub">Pick a sensor</p>
+          </div>
+          <div class="segmented" role="group" aria-label="Time range">
+            <button type="button" data-min="5">5 m</button>
+            <button type="button" data-min="15" aria-pressed="true">15 m</button>
+            <button type="button" data-min="60">1 h</button>
+            <button type="button" data-min="360">6 h</button>
+          </div>
+        </header>
+        <div class="chart-lead">
+          <span class="lead-value" id="lead-value">–</span>
+          <span class="lead-note" id="lead-note"></span>
         </div>
-      </div>
-      <div class="chart-wrap"><canvas id="chart"></canvas></div>
-    </section>
+        <div class="chart" id="chart"></div>
+      </section>
 
-    <section aria-labelledby="log-h" class="panel">
-      <div class="panel-head"><h2 id="log-h">Alert log</h2></div>
-      <table class="log">
-        <thead><tr><th>Opened</th><th>Sensor</th><th>Alert</th><th>Status</th></tr></thead>
-        <tbody id="log"></tbody>
-      </table>
-    </section>
+      <section class="card span-4" aria-labelledby="sensors-h">
+        <header class="card-head">
+          <h2 id="sensors-h">Sensors</h2>
+          <p class="card-meta" id="online-count"></p>
+        </header>
+        <ul class="sensor-list" id="sensors"></ul>
+      </section>
+
+      <section class="card span-12" aria-labelledby="log-h">
+        <header class="card-head">
+          <h2 id="log-h">Alert log</h2>
+          <p class="card-meta">Last 12 alerts</p>
+        </header>
+        <table class="log">
+          <thead><tr><th scope="col">Opened</th><th scope="col">Sensor</th><th scope="col">Alert</th><th scope="col" class="num">Reading</th><th scope="col" class="num">Lasted</th></tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </section>
+
+
+    </div>
   </main>
+
+  <div class="tooltip" id="tooltip" hidden></div>
 </body>
 </html>

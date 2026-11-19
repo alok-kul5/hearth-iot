@@ -1,209 +1,534 @@
-// Live dashboard: loads current state over REST, then follows the WebSocket feed.
+// Home Sensors dashboard: loads state over REST, then follows the WebSocket feed.
+
+const $ = (s) => document.querySelector(s);
+const ROOMS = {
+  // The flat, drawn to the plan's 600 x 360 viewBox. 8px gaps are the walls.
+  living_room: { label: "Living room", x: 0, y: 0, w: 296, h: 206 },
+  kitchen: { label: "Kitchen", x: 304, y: 0, w: 166, h: 140 },
+  bathroom: { label: "Bathroom", x: 478, y: 0, w: 122, h: 140 },
+  hallway: { label: "Hallway", x: 304, y: 148, w: 296, h: 58 },
+  bedroom: { label: "Bedroom", x: 0, y: 214, w: 296, h: 146 },
+  entrance: { label: "Entrance", x: 304, y: 214, w: 296, h: 146 },
+};
+// Where each door sits on its room's outer wall.
+const DOORS = {
+  "door-front": { x1: 410, y1: 358, x2: 470, y2: 358, hinge: [410, 358], swing: -1 },
+  "door-back": { x1: 340, y1: 2, x2: 392, y2: 2, hinge: [340, 2], swing: 1 },
+};
+const TYPE_LABEL = { temperature: "temperature", humidity: "humidity", motion: "motion", door: "door" };
+const UNIT = { temperature: "°C", humidity: "%" };
 
 const state = {
-  sensors: new Map(),   // sensor_id -> sensor row
-  active: new Map(),    // alert key -> alert row
+  sensors: new Map(),
+  active: new Map(),     // alert key -> alert row
+  log: [],
+  rules: { rules: [], stale_after_seconds: 30 },
   selected: null,
   minutes: 15,
-  chart: null,
+  points: [],
+  messages: [],          // timestamps of live readings, for the rate
 };
 
-const LABELS = {
-  temperature: "Temperature",
-  humidity: "Humidity",
-  motion: "Motion",
-  door: "Door",
+const time = (ts, sec = false) =>
+  new Date(ts * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(sec ? { second: "2-digit" } : {}) });
+const dur = (s) => {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} m ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} m`;
 };
-
-const $ = (sel) => document.querySelector(sel);
-const fmtTime = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const ago = (ts) => {
-  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
-  return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
+const ago = (ts) => dur(Date.now() / 1000 - ts) + " ago";
+const roomOf = (s) => ROOMS[s.room]?.label ?? s.room.replace(/_/g, " ");
+const isBinary = (s) => s.type === "door" || s.type === "motion";
+const fmtValue = (s, v = s.last_value) => {
+  if (v == null) return { text: "–", unit: "" };
+  if (s.type === "door") return { text: v ? "Open" : "Closed", unit: "" };
+  if (s.type === "motion") return { text: v ? "Motion" : "Clear", unit: "" };
+  return { text: v.toFixed(1), unit: UNIT[s.type] ?? s.unit };
 };
+const sensorName = (s) => (s.type === "door" ? (s.sensor_id === "door-front" ? "Front door" : "Back door") : `${roomOf(s)} ${TYPE_LABEL[s.type]}`);
+const alertingSensors = () => new Set([...state.active.values()].map((a) => a.sensor_id));
+// Alert text written from the rule and the reading, so the screen never shows the raw 2-decimal log message.
+function alertText(a, withValue = true) {
+  const s = state.sensors.get(a.sensor_id);
+  if (a.rule === "sensor_offline") return a.resolved_at ? "Went silent" : `No reading for over ${state.rules.stale_after_seconds} s`;
+  const rule = state.rules.rules.find((r) => r.name === a.rule);
+  if (s?.type === "door" || rule?.sensor_type === "door") return "Left open for over a minute";
+  if (rule && a.value != null) {
+    const unit = UNIT[rule.sensor_type] ?? "";
+    const where = `${rule.op.startsWith(">") ? "above" : "below"} the ${rule.threshold} ${unit} limit`;
+    return withValue ? `${a.value.toFixed(1)} ${unit}, ${where}` : where.charAt(0).toUpperCase() + where.slice(1);
+  }
+  return a.message;
+}
+const readingText = (a) => {
+  const s = state.sensors.get(a.sensor_id);
+  if (a.value == null || !s) return "–";
+  const v = fmtValue(s, a.value);
+  return `${v.text}${v.unit ? " " + v.unit : ""}`;
+};
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-function displayValue(s) {
-  if (s.last_value == null) return "–";
-  if (s.type === "door") return s.last_value ? "Open" : "Closed";
-  if (s.type === "motion") return s.last_value ? "Motion" : "Clear";
-  return `${s.last_value.toFixed(1)}<small>${s.unit}</small>`;
+async function getJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url}: ${r.status}`);
+  return r.json();
 }
 
-function renderSensors() {
-  const grid = $("#sensors");
-  const alerting = new Set([...state.active.values()].map((a) => a.sensor_id));
-  grid.replaceChildren(
-    ...[...state.sensors.values()].map((s) => {
-      const el = document.createElement("button");
-      el.className = "card";
-      el.dataset.id = s.sensor_id;
-      el.classList.toggle("selected", s.sensor_id === state.selected);
-      el.classList.toggle("alerting", alerting.has(s.sensor_id));
-      el.classList.toggle("offline", s.online === false);
-      el.innerHTML = `
-        <span class="room">${s.room.replace("_", " ")}</span>
-        <span class="name">${LABELS[s.type] ?? s.type} · ${s.sensor_id}</span>
-        <span class="value">${displayValue(s)}</span>
-        <span class="meta">${s.online === false ? "offline" : s.last_ts ? ago(s.last_ts) : ""}</span>`;
-      el.onclick = () => select(s.sensor_id);
-      return el;
-    }),
-  );
+
+/* ── Motion helpers ────────────────────────────────────── */
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const tweens = new WeakMap();
+// Count a number from one value to the next on the element's first text node.
+function tween(el, from, to, dec) {
+  const node = el.firstChild;
+  if (!node || node.nodeType !== 3) return;
+  cancelAnimationFrame(tweens.get(el));
+  if (reduced() || !Number.isFinite(from) || from === to) { node.nodeValue = to.toFixed(dec); return; }
+  const t0 = performance.now(), D = 600;
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / D), e = 1 - (1 - k) ** 3;
+    node.nodeValue = (from + (to - from) * e).toFixed(dec);
+    if (k < 1) tweens.set(el, requestAnimationFrame(step));
+  };
+  tweens.set(el, requestAnimationFrame(step));
+}
+// Patch `a` to look like `b` while keeping its nodes, so CSS transitions run and numbers can glide.
+function morph(a, b) {
+  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
+  if (a.nodeType === 3) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  if (a.nodeType !== 1) return;
+  const numFrom = a.getAttribute("data-num"), numTo = b.getAttribute("data-num");
+  for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
+  const ac = [...a.childNodes], bc = [...b.childNodes];
+  if (ac.length !== bc.length) { a.replaceChildren(...bc); return; }
+  ac.forEach((c, i) => {
+    if (i === 0 && numTo != null && numFrom != null && c.nodeType === 3 && numFrom !== numTo) {
+      tween(a, parseFloat(numFrom), parseFloat(numTo), +(b.getAttribute("data-dec") ?? 1));
+    } else morph(c, bc[i]);
+  });
+}
+function patch(container, html, svgNS = false) {
+  const tpl = document.createElement(svgNS ? "div" : "template");
+  tpl.innerHTML = svgNS ? `<svg xmlns="http://www.w3.org/2000/svg">${html}</svg>` : html;
+  const fresh = svgNS ? tpl.firstChild : tpl.content;
+  const kids = [...fresh.childNodes];
+  const old = [...container.childNodes];
+  if (old.length !== kids.length) { container.replaceChildren(...kids); return false; }
+  old.forEach((c, i) => morph(c, kids[i]));
+  return true;
+}
+const numAttr = (s, v = s.last_value) => (v == null || isBinary(s) ? "" : `data-num="${v.toFixed(1)}" data-dec="1"`);
+
+/* ── Floor plan ────────────────────────────────────────── */
+function renderPlan() {
+  const svg = $("#plan");
+  const bad = alertingSensors();
+  // Compact mode: on a narrow card the plan scales down, so its text is set larger in plan units.
+  const C = svg.clientWidth < 480;
+  svg.classList.toggle("compact", C);
+  const byRoom = {};
+  for (const s of state.sensors.values()) (byRoom[s.room] ??= []).push(s);
+  let out = "";
+  for (const [key, r] of Object.entries(ROOMS)) {
+    const list = byRoom[key] ?? [];
+    const temp = list.find((s) => s.type === "temperature");
+    const hum = list.find((s) => s.type === "humidity");
+    const motion = list.find((s) => s.type === "motion");
+    const door = list.find((s) => s.type === "door");
+    const primary = temp ?? hum ?? motion ?? door;
+    const alerting = list.some((s) => bad.has(s.sensor_id));
+    const selected = list.some((s) => s.sensor_id === state.selected);
+    const x = r.x + (C ? 12 : 16);
+    let body = "";
+    if (key === "hallway") {
+      const on = motion?.last_value === 1;
+      body = `<text class="room-name" x="${x}" y="${r.y + (C ? 25 : 24)}">${r.label}</text>
+        <text class="sub" x="${x}" y="${r.y + (C ? 48 : 44)}">${motion ? (motion.online ? (on ? "Someone is moving" : "No movement") : "Sensor offline") : "No sensor"}</text>
+        <circle class="motion-ring ${on ? "active" : ""}" cx="${r.x + r.w - 30}" cy="${r.y + r.h / 2}" r="8"/>
+        <circle class="motion-dot ${on ? "active" : ""}" cx="${r.x + r.w - 30}" cy="${r.y + r.h / 2}" r="6"/>`;
+    } else if (primary) {
+      const v = fmtValue(primary);
+      const off = !primary.online;
+      const pBad = bad.has(primary.sensor_id);
+      body = `<text class="room-name" x="${x}" y="${r.y + (C ? 30 : 26)}">${r.label}</text>
+        <text class="reading ${pBad ? "bad" : ""} ${off ? "offline" : ""}" x="${x}" y="${r.y + (C ? 74 : 62)}" ${numAttr(primary)}>${v.text}<tspan class="unit" dx="3">${v.unit}</tspan></text>`;
+      const extra = [];
+      if (temp && hum) extra.push({ s: hum, t: `Humidity ${fmtValue(hum).text} %` });
+      if (door && primary !== door) extra.push({ s: door, t: `${door.sensor_id === "door-back" ? "Back door" : "Door"} ${fmtValue(door).text.toLowerCase()}` });
+      if (off) extra.unshift({ s: primary, t: `Offline · last ${ago(primary.last_ts)}` });
+      else if (!C && !extra.length && primary.last_ts) extra.push({ s: { sensor_id: "" }, t: `Updated ${ago(primary.last_ts)}`, faint: true });
+      extra.slice(0, 2).forEach((e, i) => {
+        body += `<text class="sub ${bad.has(e.s.sensor_id) ? "bad" : ""} ${e.faint ? "fresh" : ""}" x="${x}" y="${r.y + (C ? 102 : 86) + i * (C ? 24 : 19)}">${esc(e.t)}</text>`;
+      });
+    } else {
+      body = `<text class="room-name" x="${x}" y="${r.y + (C ? 30 : 26)}">${r.label}</text>`;
+    }
+    out += `<g class="room ${alerting ? "alerting" : ""} ${selected ? "selected" : ""}" data-sensor="${primary?.sensor_id ?? ""}" tabindex="${primary ? 0 : -1}" role="button" aria-label="${r.label}${primary ? ": " + fmtValue(primary).text : ""}">
+      <rect class="floor" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"/>
+      <rect class="edge" x="${r.x + 0.75}" y="${r.y + 0.75}" width="${r.w - 1.5}" height="${r.h - 1.5}" rx="13.5"/>
+      ${body}</g>`;
+  }
+  for (const [id, d] of Object.entries(DOORS)) {
+    const s = state.sensors.get(id);
+    if (!s) continue;
+    const open = s.last_value === 1;
+    const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
+    const [hx, hy] = d.hinge;
+    const swing = `M ${d.x2} ${d.y2} A ${len} ${len} 0 0 ${d.swing > 0 ? 1 : 0} ${hx} ${hy + d.swing * -len}`;
+    out += `<path class="door-swing ${open ? "open" : ""}" d="${swing}"/>
+      <line class="door ${open ? "open" : ""} ${bad.has(id) ? "alerting" : ""}" x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}"><title>${sensorName(s)}: ${fmtValue(s).text}</title></line>`;
+  }
+  patch(svg, out, true);
+  svg.querySelectorAll(".room[data-sensor]").forEach((g) => {
+    if (!g.dataset.sensor) return;
+    g.onclick = () => select(g.dataset.sensor);
+    g.onkeydown = (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), select(g.dataset.sensor));
+  });
 }
 
+/* ── Summary line ──────────────────────────────────────── */
+function renderSummary() {
+  const all = [...state.sensors.values()];
+  if (!all.length) return;
+  const online = all.filter((s) => s.online).length;
+  const alerts = [...state.active.values()].sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1));
+  const reporting = online === all.length ? `All ${all.length} sensors reporting` : `${online} of ${all.length} sensors reporting`;
+  let text;
+  if (!alerts.length) text = `<strong>${reporting}</strong> and every reading is in range.`;
+  else {
+    const a = alerts[0];
+    const s = state.sensors.get(a.sensor_id);
+    const more = alerts.length > 1 ? ` and ${alerts.length - 1} more` : "";
+    text = `<strong>${reporting}.</strong> <span class="bad">${alerts.length} alert${alerts.length > 1 ? "s" : ""}</span>: ${esc(s ? sensorName(s) : a.sensor_id)} ${esc(alertText(a))} since ${time(a.opened_at)}${more}.`;
+  }
+  $("#summary").innerHTML = text;
+  $("#scope").textContent = `${all.length} sensors · ${new Set(all.map((s) => s.room)).size} rooms`;
+  $("#online-count").textContent = `${online} of ${all.length} online`;
+}
+
+/* ── Alerts ────────────────────────────────────────────── */
 function renderAlerts() {
-  const list = $("#alerts");
-  const items = [...state.active.values()].sort((a, b) => b.opened_at - a.opened_at);
-  $("#alert-count").textContent = items.length;
-  $("#alert-count").classList.toggle("hot", items.length > 0);
-  if (!items.length) {
-    list.innerHTML = `<li class="empty">No active alerts</li>`;
+  const list = [...state.active.values()].sort((a, b) => b.opened_at - a.opened_at);
+  $("#alert-count").textContent = list.length;
+  $("#alert-count").classList.toggle("hot", list.length > 0);
+  if (!list.length) {
+    $("#alerts").innerHTML = `<li class="all-clear"><strong>Nothing needs attention</strong>Every sensor is reporting and in range.</li>`;
     return;
   }
-  list.replaceChildren(
-    ...items.map((a) => {
-      const li = document.createElement("li");
-      li.className = `alert ${a.severity}`;
-      li.innerHTML = `<div><span class="who">${a.sensor_id}</span> · ${a.message}</div>
-        <span class="when">since ${fmtTime(a.opened_at)}</span>`;
-      return li;
-    }),
-  );
+  const now = Date.now() / 1000;
+  const seen = (renderAlerts.seen ??= new Set());
+  const html = list.slice(0, 5).map((a) => {
+    const s = state.sensors.get(a.sensor_id);
+    return `<li class="alert ${seen.has(a.key) ? "" : "enter"}">
+      <div class="top"><span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">${dur(now - a.opened_at)}</span></div>
+      <span class="what">${esc(alertText(a))}</span>
+      <span class="pill ${a.severity}">${a.severity === "critical" ? "Critical" : "Warning"}</span>
+    </li>`;
+  }).join("");
+  patch($("#alerts"), html);
+  list.forEach((a) => seen.add(a.key));
 }
 
-function addLogRow(a, prepend = true) {
-  const body = $("#log");
-  let row = body.querySelector(`tr[data-id="${a.id}"]`);
-  if (!row) {
-    row = document.createElement("tr");
-    row.dataset.id = a.id;
-    prepend ? body.prepend(row) : body.append(row);
+/* ── Sensor list ───────────────────────────────────────── */
+function renderSensors() {
+  const bad = alertingSensors();
+  const rows = [...state.sensors.values()].sort((a, b) => roomOf(a).localeCompare(roomOf(b)) || a.type.localeCompare(b.type));
+  patch($("#sensors"), rows.map((s) => {
+    const v = fmtValue(s);
+    const dot = !s.online ? "off" : bad.has(s.sensor_id) ? "bad" : "";
+    return `<li><button type="button" data-id="${s.sensor_id}" aria-current="${s.sensor_id === state.selected}">
+      <span class="dot ${dot}" aria-hidden="true"></span>
+      <span class="name">${esc(roomOf(s))}<small>${esc(s.type === "door" ? sensorName(s).toLowerCase() : TYPE_LABEL[s.type])}</small></span>
+      <span class="val ${bad.has(s.sensor_id) ? "bad" : ""}" ${s.online ? numAttr(s) : ""}>${s.online ? v.text : "Offline"}${s.online && v.unit ? `<span class="unit">${v.unit}</span>` : ""}</span>
+    </button></li>`;
+  }).join(""));
+  $("#sensors").querySelectorAll("button").forEach((b) => (b.onclick = () => select(b.dataset.id)));
+}
+
+/* ── Alert log and rules ───────────────────────────────── */
+function renderLog() {
+  const rows = state.log.slice(0, 12);
+  if (!rows.length) {
+    $("#log").innerHTML = `<tr><td colspan="5" class="log-empty">No alerts yet. They appear here when a reading crosses a rule.</td></tr>`;
+    return;
   }
-  const open = a.resolved_at == null;
-  row.innerHTML = `<td>${fmtTime(a.opened_at)}</td><td>${a.sensor_id}</td><td>${a.message}</td>
-    <td><span class="pill ${open ? "open" : ""}">${open ? "open" : "resolved " + fmtTime(a.resolved_at)}</span></td>`;
-  while (body.children.length > 40) body.lastChild.remove();
+  const now = Date.now() / 1000;
+  $("#log").innerHTML = rows.map((a) => {
+    const s = state.sensors.get(a.sensor_id);
+    const lasted = a.resolved_at == null ? `<span class="open">Open · ${dur(now - a.opened_at)}</span>` : dur(a.resolved_at - a.opened_at);
+    return `<tr><td class="time">${time(a.opened_at, true)}</td><td>${esc(s ? sensorName(s) : a.sensor_id)}</td><td>${esc(alertText(a, false))}</td><td class="num">${readingText(a)}</td><td class="num">${lasted}</td></tr>`;
+  }).join("");
 }
 
-async function loadChart() {
-  if (!state.selected || !window.Chart) return;
-  const s = state.sensors.get(state.selected);
-  $("#chart-title").textContent = `${s.sensor_id} (${s.room.replace("_", " ")})`;
-  const res = await fetch(`/api/sensors/${state.selected}/history?minutes=${state.minutes}`);
-  const points = await res.json();
-  const data = points.map((p) => ({ x: p.ts * 1000, y: p.value }));
-  const binary = s.type === "door" || s.type === "motion";
-  const css = getComputedStyle(document.documentElement);
-  const accent = css.getPropertyValue("--accent").trim();
-  const muted = css.getPropertyValue("--muted").trim();
-  const line = css.getPropertyValue("--line").trim();
-
-  if (state.chart) state.chart.destroy();
-  state.chart = new Chart($("#chart"), {
-    type: "line",
-    data: {
-      datasets: [{
-        data, borderColor: accent, backgroundColor: accent + "22", fill: "start",
-        borderWidth: 2, pointRadius: 0, tension: binary ? 0 : 0.25, stepped: binary,
-      }],
-    },
-    options: {
-      animation: false, maintainAspectRatio: false, parsing: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: {
-          type: "linear", ticks: { color: muted, maxTicksLimit: 6, callback: (v) => fmtTime(v / 1000) },
-          grid: { color: line },
-        },
-        y: {
-          ticks: { color: muted, callback: binary ? (v) => (v === 1 ? (s.type === "door" ? "open" : "motion") : v === 0 ? "—" : "") : (v) => +v.toFixed(2) },
-          grid: { color: line }, ...(binary ? { min: 0, max: 1 } : {}),
-          title: { display: !binary, text: s.unit, color: muted },
-        },
-      },
-    },
+function renderRules() {
+  const pretty = (n) => n.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  const unitFor = (t) => UNIT[t] ?? "";
+  const items = state.rules.rules.map((r) => {
+    const cond = r.sensor_type === "door" ? "Open" : `${r.op === ">" ? "Above" : r.op === "<" ? "Below" : r.op} ${r.threshold}${unitFor(r.sensor_type) ? " " + unitFor(r.sensor_type) : ""}`;
+    return `<li><span class="r-name">${pretty(r.name)}</span><span class="r-cond">${cond}${r.for_seconds ? ` for ${r.for_seconds} s` : ""}</span></li>`;
   });
+  items.push(`<li><span class="r-name">Sensor offline</span><span class="r-cond">Silent for ${state.rules.stale_after_seconds} s</span></li>`);
+  $("#rules").innerHTML = items.join("");
+}
+
+/* ── History chart (SVG, drawn from the points) ────────── */
+function ticks(min, max, count = 4) {
+  if (max === min) { max += 1; min -= 1; }
+  const raw = (max - min) / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+  const lo = Math.floor(min / step) * step;
+  let hi = Math.ceil(max / step) * step;
+  if (hi <= max) hi += step;
+  const out = [];
+  for (let v = lo; v <= hi + step / 2; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+function thresholdFor(s) {
+  const rule = state.rules.rules.find((r) => r.sensor_type === s.type && r.op === ">");
+  return rule && !isBinary(s) ? rule.threshold : null;
+}
+
+function renderChart() {
+  const el = $("#chart");
+  const s = state.sensors.get(state.selected);
+  if (!s) return;
+  const pts = state.points;
+  const v = fmtValue(s);
+  $("#chart-h").textContent = `History · ${sensorName(s)}`;
+  $("#chart-sub").textContent = `Last ${state.minutes >= 60 ? state.minutes / 60 + " h" : state.minutes + " min"}${state.minutes > 15 ? ", averaged" : ""}`;
+  animateLead(s, v);
+  const thr = thresholdFor(s);
+  const note = $("#lead-note");
+  if (bad(s)) { note.textContent = thr != null ? `Above the ${thr} ${v.unit} limit` : "Alert open"; note.className = "lead-note bad"; }
+  else if (pts.length && !isBinary(s)) {
+    const vals = pts.map((p) => p.value);
+    note.textContent = `Range ${Math.min(...vals).toFixed(1)}–${Math.max(...vals).toFixed(1)} ${v.unit} in this window`;
+    note.className = "lead-note";
+  } else note.textContent = "";
+
+  if (pts.length < 2) { el.innerHTML = `<div class="chart-empty">Collecting readings…</div>`; return; }
+  const W = el.clientWidth, H = el.clientHeight, L = 40, R = 8, T = 10, B = 24;
+  const xs = pts.map((p) => p.ts), x0 = xs[0], x1 = xs[xs.length - 1];
+  let yt;
+  if (isBinary(s)) yt = [0, 1];
+  else {
+    const vals = pts.map((p) => p.value);
+    const lo = Math.min(...vals, thr ?? Infinity), hi = Math.max(...vals, thr ?? -Infinity);
+    yt = ticks(lo, hi, 4);
+  }
+  const y0 = yt[0], y1 = yt[yt.length - 1];
+  const X = (t) => L + ((t - x0) / Math.max(1, x1 - x0)) * (W - L - R);
+  const Y = (val) => T + (1 - (val - y0) / (y1 - y0 || 1)) * (H - T - B);
+  let d = "";
+  pts.forEach((p, i) => {
+    if (isBinary(s) && i) d += ` H ${X(p.ts).toFixed(1)} V ${Y(p.value).toFixed(1)}`;
+    else d += `${i ? " L" : "M"} ${X(p.ts).toFixed(1)} ${Y(p.value).toFixed(1)}`;
+  });
+  const grid = yt.map((t) => `<line class="gridline" x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}"/>
+    <text class="tick" x="${L - 8}" y="${Y(t) + 4}" text-anchor="end">${isBinary(s) ? (t ? (s.type === "door" ? "Open" : "Yes") : (s.type === "door" ? "Shut" : "No")) : t}</text>`).join("");
+  // X labels: one step, on round minutes.
+  const span = x1 - x0, stepS = [60, 120, 300, 600, 900, 1800, 3600, 7200].find((st) => span / st <= 6) ?? 7200;
+  let xl = "";
+  for (let t = Math.ceil(x0 / stepS) * stepS; t <= x1; t += stepS) {
+    xl += `<text class="tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${time(t)}</text>`;
+  }
+  const thrLine = thr != null && thr <= y1 ? `<line class="threshold" x1="${L}" x2="${W - R}" y1="${Y(thr)}" y2="${Y(thr)}"/><text class="threshold-label" x="${W - R}" y="${Y(thr) - 6}" text-anchor="end">Alert above ${thr} ${v.unit}</text>` : "";
+  const area = isBinary(s) ? `<path class="area" d="${d} V ${Y(y0)} H ${X(x0)} Z"/>` : "";
+  const drawIn = renderChart.drawIn && !reduced();
+  renderChart.drawIn = false;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(sensorName(s))} over the last ${state.minutes} minutes">
+    ${grid}${xl}${thrLine}${area}<path class="line" d="${d}"/>
+    <line class="cursor" y1="${T}" y2="${H - B}" hidden/><circle class="dot" r="4" hidden/></svg>`;
+  const svg = el.querySelector("svg"), cur = svg.querySelector(".cursor"), dot = svg.querySelector(".dot"), tip = $("#tooltip");
+  if (drawIn) {
+    const line = svg.querySelector(".line"), len = line.getTotalLength();
+    line.style.strokeDasharray = `${len}`;
+    line.style.strokeDashoffset = `${len}`;
+    line.getBoundingClientRect();
+    line.style.transition = "stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1)";
+    line.style.strokeDashoffset = "0";
+    svg.classList.add("fade-in");
+  }
+  svg.onpointermove = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const t = x0 + ((e.clientX - rect.left - L) / (W - L - R)) * (x1 - x0);
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(p.ts - t) < Math.abs(best.ts - t)) best = p;
+    const px = X(best.ts), py = Y(best.value);
+    cur.setAttribute("x1", px); cur.setAttribute("x2", px); cur.hidden = false;
+    dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.hidden = false;
+    const fv = fmtValue(s, best.value);
+    tip.textContent = `${time(best.ts, true)}  ${fv.text}${fv.unit ? " " + fv.unit : ""}`;
+    tip.hidden = false;
+    tip.style.left = `${rect.left + (px / W) * rect.width + 12}px`;
+    tip.style.top = `${rect.top + (py / H) * rect.height - 30}px`;
+  };
+  svg.onpointerleave = () => { cur.hidden = true; dot.hidden = true; tip.hidden = true; };
+}
+const bad = (s) => alertingSensors().has(s.sensor_id);
+
+let leadShown = null;
+function animateLead(s, v) {
+  const el = $("#lead-value");
+  const target = s.last_value;
+  if (isBinary(s) || target == null || leadShown == null || leadShown.id !== s.sensor_id) {
+    el.innerHTML = `${v.text}${v.unit ? `<span class="unit">${v.unit}</span>` : ""}`;
+    leadShown = { id: s.sensor_id, value: target };
+    return;
+  }
+  const from = leadShown.value, t0 = performance.now(), token = (animateLead.token = (animateLead.token ?? 0) + 1);
+  leadShown = { id: s.sensor_id, value: target };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || from === target) {
+    el.innerHTML = `${v.text}<span class="unit">${v.unit}</span>`;
+    return;
+  }
+  const step = (now) => {
+    if (token !== animateLead.token) return; // a newer reading took over
+    const k = Math.min(1, (now - t0) / 450), e = 1 - (1 - k) ** 3;
+    el.innerHTML = `${(from + (target - from) * e).toFixed(1)}<span class="unit">${v.unit}</span>`;
+    if (k < 1 && leadShown.id === s.sensor_id) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+async function loadHistory() {
+  if (!state.selected) return;
+  renderChart.drawIn = true;
+  state.points = await getJSON(`/api/sensors/${state.selected}/history?minutes=${state.minutes}`).catch(() => []);
+  renderChart();
 }
 
 function select(id) {
   state.selected = id;
+  renderPlan();
   renderSensors();
-  loadChart();
+  loadHistory();
 }
 
+/* ── Live updates ──────────────────────────────────────── */
 function onReading(r) {
   const prev = state.sensors.get(r.sensor_id) ?? {};
   state.sensors.set(r.sensor_id, { ...prev, ...r, last_value: r.value, last_ts: r.ts, online: true });
-  renderSensors();
-  const card = document.querySelector(`.card[data-id="${r.sensor_id}"]`);
-  card?.classList.add("flash");
-  if (r.sensor_id === state.selected && state.chart) {
-    const ds = state.chart.data.datasets[0].data;
-    ds.push({ x: r.ts * 1000, y: r.value });
-    const cutoff = Date.now() - state.minutes * 60 * 1000;
-    while (ds.length && ds[0].x < cutoff) ds.shift();
-    state.chart.update("none");
+  state.messages.push(Date.now());
+  if (r.sensor_id === state.selected) {
+    state.points.push({ ts: r.ts, value: r.value });
+    const cutoff = Date.now() / 1000 - state.minutes * 60;
+    while (state.points.length && state.points[0].ts < cutoff) state.points.shift();
   }
+  scheduleRender();
 }
 
 function onAlert(event, a) {
   if (event === "opened") state.active.set(a.key, a);
   else state.active.delete(a.key);
-  renderAlerts();
-  renderSensors();
-  addLogRow(a);
+  const i = state.log.findIndex((x) => x.id === a.id);
+  if (i >= 0) state.log[i] = a; else state.log.unshift(a);
+  scheduleRender();
+}
+
+let pending = false;
+function scheduleRender() {
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => {
+    pending = false;
+    renderPlan(); renderSummary(); renderAlerts(); renderSensors(); renderLog(); renderChart();
+  });
+}
+
+function setStatus(kind, text) {
+  $("#status").className = `status ${kind}`;
+  $("#status-text").textContent = text;
+  document.querySelector(".pipeline").classList.toggle("idle", kind !== "live");
 }
 
 function connect() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen = () => {
-    $("#status").classList.add("live");
-    $("#status-text").textContent = "Live";
-  };
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onopen = () => setStatus("live", "Live");
   ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.kind === "reading") onReading(msg.data);
-    else if (msg.kind === "alert") onAlert(msg.event, msg.data);
+    const m = JSON.parse(e.data);
+    if (m.kind === "reading") onReading(m.data);
+    else if (m.kind === "alert") onAlert(m.event, m.data);
   };
   ws.onclose = () => {
-    $("#status").classList.remove("live");
-    $("#status-text").textContent = "Reconnecting…";
-    setTimeout(async () => { await loadInitial(); connect(); }, 2000);
+    setStatus("down", "Reconnecting");
+    setTimeout(async () => { await loadAll().catch(() => {}); connect(); }, 2000);
   };
 }
 
-async function loadInitial() {
-  const [sensors, active, log] = await Promise.all([
-    fetch("/api/sensors").then((r) => r.json()),
-    fetch("/api/alerts?active=true").then((r) => r.json()),
-    fetch("/api/alerts?limit=40").then((r) => r.json()),
+async function loadAll() {
+  const [sensors, active, log, rules] = await Promise.all([
+    getJSON("/api/sensors"), getJSON("/api/alerts?active=true"), getJSON("/api/alerts?limit=12"), getJSON("/api/rules"),
   ]);
   state.sensors = new Map(sensors.map((s) => [s.sensor_id, s]));
   state.active = new Map(active.map((a) => [a.key, a]));
-  if (!state.selected && sensors.length) state.selected = sensors.find((s) => s.type === "temperature")?.sensor_id ?? sensors[0].sensor_id;
-  $("#log").replaceChildren();
-  log.forEach((a) => addLogRow(a, false));
-  renderSensors();
-  renderAlerts();
-  loadChart();
+  state.log = log;
+  state.rules = rules;
+  if (!state.selected && sensors.length) {
+    const firstBad = active[0]?.sensor_id;
+    state.selected = firstBad ?? sensors.find((s) => s.sensor_id === "temp-living")?.sensor_id ?? sensors[0].sensor_id;
+  }
+  renderRules();
+  scheduleRender();
+  await loadHistory();
 }
 
-document.querySelectorAll(".ranges button").forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll(".ranges button").forEach((x) => x.classList.remove("on"));
-    b.classList.add("on");
-    state.minutes = Number(b.dataset.min);
-    loadChart();
-  };
-});
-
-// Refresh the "Ns ago" / offline labels even when nothing arrives.
+// Once a second: the rate, the freshness stamp and the "x s ago" labels.
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  while (state.messages.length && state.messages[0] < cutoff) state.messages.shift();
+  $("#rate").textContent = `${state.messages.length} msg/min`;
+  const last = Math.max(0, ...[...state.sensors.values()].map((s) => s.last_ts ?? 0));
+  $("#stamp").textContent = last ? `Last reading ${time(last, true)}` : "";
+}, 1000);
+// Every 5 s: online flags from the server (offline detection lives there).
 setInterval(async () => {
-  const sensors = await fetch("/api/sensors").then((r) => r.json()).catch(() => null);
+  const sensors = await getJSON("/api/sensors").catch(() => null);
   if (!sensors) return;
   sensors.forEach((s) => state.sensors.set(s.sensor_id, { ...state.sensors.get(s.sensor_id), ...s }));
-  renderSensors();
+  scheduleRender();
 }, 5000);
 
-loadInitial().then(connect);
+const seg = $(".segmented"), thumb = document.createElement("span");
+thumb.className = "thumb";
+thumb.setAttribute("aria-hidden", "true");
+seg.prepend(thumb);
+let settleT;
+function moveThumb() {
+  const on = seg.querySelector('[aria-pressed="true"]');
+  seg.querySelectorAll("button").forEach((b) => b.classList.remove("settled"));
+  thumb.style.width = `${on.offsetWidth}px`;
+  thumb.style.transform = `translateX(${on.offsetLeft - 3}px)`;
+  // When the slide ends, the option paints its own fill (same look; readable without the thumb).
+  clearTimeout(settleT);
+  settleT = setTimeout(() => on.classList.add("settled"), reduced() ? 0 : 480);
+}
+requestAnimationFrame(moveThumb);
+document.fonts?.ready.then(moveThumb);
+document.querySelectorAll(".segmented button").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll(".segmented button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    moveThumb();
+    state.minutes = Number(b.dataset.min);
+    loadHistory();
+  };
+});
+document.querySelectorAll(".card").forEach((c) => {
+  c.addEventListener("pointermove", (e) => {
+    const r = c.getBoundingClientRect();
+    c.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    c.style.setProperty("--my", `${e.clientY - r.top}px`);
+  });
+});
+document.querySelectorAll(".title-row, .card").forEach((el, i) => el.style.setProperty("--i", i));
+document.body.classList.add("enter");
+// Drop the entrance once it has played, so hover transforms are no longer held by the animation.
+setTimeout(() => document.body.classList.remove("enter"), 1800);
+let resizeT;
+addEventListener("resize", () => renderPlan());
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { renderChart(); moveThumb(); }, 120); });
+
+loadAll().then(connect).catch(() => { setStatus("down", "Backend unreachable"); setTimeout(() => location.reload(), 5000); });
