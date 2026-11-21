@@ -161,3 +161,13 @@ def test_home_assistant_birth_message_resends_discovery(client, monkeypatch):
     client.app.state.on_message("homeassistant/status", b"online")
     assert len(sent) == 2
     assert client.get("/api/health").json()["messages_rejected"] == 0  # not treated as a reading
+
+
+def test_simulate_sends_the_event_to_the_simulator(client, monkeypatch):
+    sent = []
+    monkeypatch.setattr(client.app.state, "publish", lambda topic, payload, retain=False: sent.append((topic, payload)))
+    r = client.post("/api/simulate/cooking")
+    assert r.status_code == 202
+    assert r.json()["event"] == "cooking"
+    assert sent == [("hearth/cmd/sim", "cooking")]
+    assert client.post("/api/simulate/meteor").status_code == 404

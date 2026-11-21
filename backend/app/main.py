@@ -28,6 +28,14 @@ from .storage import Storage
 log = logging.getLogger("dashboard")
 STATIC_DIR = APP_DIR / "static"
 
+# Things a visitor can make happen in the simulated home, sent to the simulator on hearth/cmd/sim.
+SIM_EVENTS = {
+    "cooking": "Dinner is on the hob",
+    "guests": "Four friends came over",
+    "spray": "Someone used a cleaning spray",
+    "leak": "Water is dripping under the bathroom sink",
+}
+
 
 class Hub:
     """Fans live messages out to every connected browser."""
@@ -124,6 +132,7 @@ def create_app(cfg: Settings = default_settings) -> FastAPI:
     app.state.storage = storage
     app.state.on_message = on_message
     app.state.discovery = discovery
+    app.state.publish = publish
 
     @app.get("/api/health")
     def health():
@@ -178,6 +187,14 @@ def create_app(cfg: Settings = default_settings) -> FastAPI:
         """The MQTT Discovery configs Hearth publishes for Home Assistant, one per known sensor."""
         msgs = [discovery_message(s, cfg.ha_prefix) for s in storage.sensors()]
         return [{"topic": t, "config": c} for t, c in filter(None, msgs)]
+
+    @app.post("/api/simulate/{event}", status_code=202)
+    def simulate(event: str):
+        """Make something happen in the simulated home (the dashboard's "Try it" buttons)."""
+        if not cfg.sim_controls or event not in SIM_EVENTS:
+            raise HTTPException(404, f"unknown event {event}")
+        app.state.publish(f"{COMMAND_PREFIX}/sim", event)
+        return {"event": event, "what": SIM_EVENTS[event], "sent": cfg.enable_mqtt and subscriber.connected}
 
     @app.websocket("/ws")
     async def live(ws: WebSocket):

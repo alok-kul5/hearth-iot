@@ -40,6 +40,7 @@ class Household:
     light_level: float = 0.0
     _cooking_left: int = 0
     _guests_left: int = 0
+    _pending: set[str] = field(default_factory=set)  # one-off events waiting for a sensor to pick them up
 
     @property
     def cooking(self) -> bool:
@@ -74,6 +75,17 @@ class Household:
         text = payload.decode(errors="replace").strip()
         if device == "erv-main" and text.upper() in ("ON", "OFF"):
             self.ventilation = text.upper() == "ON"
+            return True
+        if device == "sim":  # events a visitor starts from the dashboard
+            event = text.lower()
+            if event == "cooking":
+                self._cooking_left = 150
+            elif event == "guests":
+                self._guests_left = 300
+            elif event in ("spray", "leak"):
+                self._pending.add(event)
+            else:
+                return False
             return True
         if device == "light-living":
             try:
@@ -252,7 +264,8 @@ class VOCSensor(Sensor):
         target = self.base + 35 * people + (180 if h.cooking else 0)
         decay = 0.01 + (0.03 if h.ventilation else 0.0)
         self._level += (target - self._level) * decay + rng.gauss(0, 4)
-        if rng.random() < self.fault_chance:
+        if rng.random() < self.fault_chance or "spray" in h._pending:
+            h._pending.discard("spray")
             self._level += rng.uniform(500, 900)
         self._level = max(20.0, self._level)
         return float(round(self._level))
@@ -283,10 +296,14 @@ class TDSSensor(Sensor):
 class LeakSensor(Sensor):
     """1.0 while water is detected under the sink, 0.0 when dry. A leak stays wet until someone deals with it."""
 
+    household: Household = field(default_factory=Household)
     fault_chance: float = 0.0005
     _wet_left: int = 0
 
     def read(self, t: float, rng: random.Random) -> float:
+        if "leak" in self.household._pending:
+            self.household._pending.discard("leak")
+            self._wet_left = max(self._wet_left, 45)
         if self._wet_left == 0 and rng.random() < self.fault_chance:
             self._wet_left = rng.randint(30, 120)
         if self._wet_left > 0:
@@ -335,7 +352,7 @@ def default_sensors(fault_scale: float = 1.0, household: Household | None = None
         TemperatureSensor("temp-bedroom", "bedroom", "temperature", "°C", base=19.5, amplitude=1.5),
         CO2Sensor("co2-bedroom", "bedroom", "co2", "ppm", household=h),
         HumiditySensor("hum-bathroom", "bathroom", "humidity", "%", base=55),
-        LeakSensor("leak-bathroom", "bathroom", "leak", "bool"),
+        LeakSensor("leak-bathroom", "bathroom", "leak", "bool", household=h),
         TemperatureSensor("temp-kitchen", "kitchen", "temperature", "°C", base=22.5, amplitude=2.5),
         PM25Sensor("pm25-kitchen", "kitchen", "pm25", "µg/m³", household=h),
         TDSSensor("tds-kitchen", "kitchen", "tds", "ppm"),

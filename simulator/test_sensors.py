@@ -222,3 +222,19 @@ def test_local_hour_uses_the_home_time_zone():
 
     assert local_hour(NOON) == 12
     assert local_hour(NOON, ZoneInfo("Asia/Kolkata")) == 17.5
+
+
+def test_visitor_events_from_the_dashboard():
+    h = Household()
+    rng = random.Random(1)
+    assert h.apply_command("sim", b"cooking") and h.cooking
+    assert h.apply_command("sim", b"guests") and h.occupants("living_room", 12) == 5
+    voc = VOCSensor("v", "living_room", "voc", "ppb", household=h, fault_chance=0)
+    before = voc.read(NOON, rng)
+    assert h.apply_command("sim", b"spray")
+    assert voc.read(NOON, rng) > before + 400
+    leak = LeakSensor("l", "bathroom", "leak", "bool", household=h, fault_chance=0)
+    assert leak.read(NOON, rng) == 0.0
+    assert h.apply_command("sim", b"leak")
+    assert all(leak.read(NOON, rng) == 1.0 for _ in range(40))
+    assert not h.apply_command("sim", b"meteor")

@@ -22,6 +22,7 @@ class Settings:
     ha_discovery: bool = os.getenv("HA_DISCOVERY", "1") == "1"
     ha_prefix: str = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
     circadian: bool = os.getenv("CIRCADIAN", "1") == "1"
+    sim_controls: bool = os.getenv("SIMULATOR_CONTROLS", "1") == "1"  # the dashboard's "Try it" buttons
 
 
 settings = Settings()
