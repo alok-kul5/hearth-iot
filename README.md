@@ -4,7 +4,14 @@
 
 <p align="center"><b>Your home, live.</b><br>A wellness-focused smart home demo: simulated air, water and comfort sensors over MQTT, a FastAPI backend with rules and automations, circadian lighting, Home Assistant discovery, and a live floor-plan dashboard.</p>
 
+<p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><b>Live demo →</b></a></p>
+
 [![CI](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml)
+
+The [live demo](https://alok-kul5.github.io/hearth-iot/) runs the same dashboard with the
+simulator, rules, automations and circadian schedule ported to JavaScript
+([`demo/demo.js`](demo/demo.js)), all running in your browser. It reads its rules from the
+real `rules.yaml`. The full stack below uses MQTT, Mosquitto and FastAPI instead.
 
 A software-only IoT system: a Python simulator stands in for seventeen home sensors
 and devices, publishes their readings over **MQTT** to a **Mosquitto** broker, and a
