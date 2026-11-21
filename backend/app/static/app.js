@@ -428,7 +428,12 @@ function renderChart() {
   animateLead(s, v);
   const thr = thresholdFor(s);
   const note = $("#lead-note");
-  if (bad(s)) { note.textContent = thr != null ? `Above the ${thr} ${v.unit} limit` : "Alert open"; note.className = "lead-note bad"; }
+  const hyst = state.rules.rules.find((r) => r.sensor_type === s.type && r.op === ">" && r.clear_at != null);
+  if (bad(s)) {
+    if (thr != null && s.last_value <= thr && hyst) note.textContent = `Alert open until it drops below ${hyst.clear_at} ${v.unit}`;
+    else note.textContent = thr != null ? `Above the ${thr} ${v.unit} limit` : "Alert open";
+    note.className = "lead-note bad";
+  }
   else if (pts.length && !isBinary(s)) {
     const vals = pts.map((p) => p.value);
     const d = decOf(s.type);
