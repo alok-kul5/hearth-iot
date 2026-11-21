@@ -47,7 +47,7 @@ def main() -> int:
     assert all(s["online"] for s in sensors), "a sensor is offline"
     hist = get(f"{a.url}/api/sensors/{sensors[0]['sensor_id']}/history?minutes=5")
     assert hist, "history is empty"
-    assert "Home Sensors" in get(f"{a.url}/"), "dashboard page missing"
+    assert "Hearth" in get(f"{a.url}/"), "dashboard page missing"
     print(f"OK: {len(sensors)} sensors live, {len(hist)} history points for {sensors[0]['sensor_id']}")
     return 0
 

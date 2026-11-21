@@ -99,7 +99,7 @@ def test_websocket_receives_live_readings(client):
 def test_dashboard_page_is_served(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Home Sensors" in r.text
+    assert "Hearth" in r.text
     assert client.get("/static/app.js").status_code == 200
 
 

@@ -1,6 +1,10 @@
-# Smart Home Sensor Dashboard
+<p align="center"><img src="docs/brand/mark.svg" width="88" height="88" alt="Hearth logo"></p>
 
-[![CI](https://github.com/alok-kul5/smart-home-iot-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-kul5/smart-home-iot-dashboard/actions/workflows/ci.yml)
+<h1 align="center">Hearth</h1>
+
+<p align="center"><b>Your home, live.</b><br>Smart home sensor dashboard: simulated sensors over MQTT, a FastAPI backend with threshold alerts, and a live floor-plan dashboard.</p>
+
+[![CI](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml)
 
 A software-only IoT system: a Python simulator stands in for eight home sensors,
 publishes their readings over **MQTT** to a **Mosquitto** broker, and a **FastAPI**
@@ -130,3 +134,7 @@ that all eight sensors report through Mosquitto into the API.
 ## License
 
 MIT
+
+---
+
+<sub>One of six projects by [Alok Kulkarni](https://alok.is-a.dev): **Hearth** home sensors · [Headway](https://github.com/alok-kul5/headway-transit) transit data · [Vigil](https://github.com/alok-kul5/vigil-soc) security triage · [Loupe](https://github.com/alok-kul5/loupe-vision) defect inspection · [Kharcha](https://github.com/alok-kul5/kharcha-finance) personal finance · [Stockroom](https://github.com/alok-kul5/stockroom-inventory) inventory.</sub>
