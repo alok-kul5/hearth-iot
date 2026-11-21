@@ -22,7 +22,7 @@
       </svg>
       <span class="brand-name">Hearth</span>
     </a>
-    <span class="scope" id="scope">8 sensors · 6 rooms</span>
+    <span class="scope" id="scope">17 sensors · 6 rooms</span>
 
     <div class="pipeline" aria-label="Data path from sensors to this screen">
       <span>Sensors</span>
@@ -65,7 +65,7 @@
         </header>
         <ul class="alerts" id="alerts"></ul>
       </section>
-      <section class="card" aria-labelledby="rules-h">
+      <section class="card rules-card" aria-labelledby="rules-h">
         <header class="card-head">
           <h2 id="rules-h">Alert rules</h2>
           <p class="card-meta">From rules.yaml</p>
@@ -73,6 +73,34 @@
         <ul class="rules" id="rules"></ul>
       </section>
       </div>
+
+      <section class="card span-8" aria-labelledby="air-h">
+        <header class="card-head">
+          <div>
+            <h2 id="air-h">Air and water</h2>
+            <p class="card-meta">Wellness sensors · select one to see its history</p>
+          </div>
+          <span class="erv" id="erv" role="status">Ventilation off</span>
+        </header>
+        <div class="tiles" id="tiles"></div>
+      </section>
+
+      <section class="card span-4 light-card" aria-labelledby="light-h">
+        <header class="card-head">
+          <div>
+            <h2 id="light-h">Circadian light</h2>
+            <p class="card-meta" id="light-sub">Living room</p>
+          </div>
+        </header>
+        <div class="light-now">
+          <span class="bulb" id="bulb" aria-hidden="true"></span>
+          <div>
+            <span class="light-k" id="light-k">–</span>
+            <span class="light-b" id="light-b"></span>
+          </div>
+        </div>
+        <svg class="daystrip" id="daystrip" role="img" aria-label="Today's schedule: colour temperature and brightness by hour"></svg>
+      </section>
 
       <section class="card span-8" aria-labelledby="chart-h">
         <header class="card-head">
@@ -94,7 +122,7 @@
         <div class="chart" id="chart"></div>
       </section>
 
-      <section class="card span-4" aria-labelledby="sensors-h">
+      <section class="card span-4 sensors-card" aria-labelledby="sensors-h">
         <header class="card-head">
           <h2 id="sensors-h">Sensors</h2>
           <p class="card-meta" id="online-count"></p>

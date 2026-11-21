@@ -332,3 +332,73 @@ body.enter .title-row, body.enter .card { animation: rise-blur 0.9s var(--ease) 
   .card, .card:hover { transform: none; }
   body.enter .title-row, body.enter .card { animation: none; }
 }
+
+/* ── Air and water ─────────────────────────────────────── */
+.erv { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 12px; border-radius: 99px; background: var(--raised); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.erv::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.erv.on { color: var(--text); }
+.erv.on::before { background: var(--positive); animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 #7ee0a855; } 50% { box-shadow: 0 0 0 5px #7ee0a800; } }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile {
+  display: grid; gap: 6px; align-content: start; text-align: left; padding: 14px 14px 12px; border: 0; border-radius: 14px;
+  background: var(--raised); cursor: pointer; position: relative; min-width: 0;
+  transition: background 0.25s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.tile:hover { background: var(--raised-2); }
+.tile:active { transform: scale(0.985); }
+.tile[aria-current="true"] { box-shadow: inset 0 0 0 1.5px var(--data); }
+.tile.alerting { background: #3a1824; box-shadow: inset 0 0 0 1.5px var(--negative); }
+.tile[disabled] { cursor: default; opacity: 0.6; }
+.t-label { color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-label small { color: var(--faint); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.t-value { font-size: var(--fs-kpi); font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.t-value .unit { font-size: 13px; color: var(--faint); margin-left: 4px; font-weight: 400; }
+.t-value.offline { color: var(--faint); font-size: 18px; }
+.chip { position: absolute; top: 12px; right: 12px; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; }
+.chip.good { background: #1d3a2b; color: var(--positive); }
+.chip.fair { background: var(--warning-bg); color: var(--warning); }
+.chip.poor { background: var(--negative-bg); color: var(--negative); }
+.t-bar { position: relative; height: 4px; border-radius: 99px; background: var(--grid); margin-top: 4px; }
+.t-fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; transition: width 0.6s var(--ease), background 0.4s var(--ease); }
+.t-fill.good { background: var(--positive); }
+.t-fill.fair { background: var(--warning); }
+.t-fill.poor { background: var(--negative); }
+.t-limit { position: absolute; top: -3px; width: 2px; height: 10px; border-radius: 1px; background: var(--text); opacity: 0.55; transform: translateX(-1px); }
+.rules .r-act { display: block; color: var(--positive); font-size: 11.5px; margin-top: 1px; }
+
+/* ── Circadian light ──────────────────────────────────── */
+.light-now { display: flex; align-items: center; gap: 18px; margin: 4px 0 14px; }
+.bulb {
+  --bulb: rgb(255, 180, 107); --glow: 0.5;
+  width: 58px; height: 58px; border-radius: 50%; flex: none; background: var(--bulb);
+  opacity: calc(0.35 + var(--glow) * 0.65);
+  box-shadow: 0 0 calc(10px + var(--glow) * 40px) calc(var(--glow) * 10px) color-mix(in srgb, var(--bulb) 60%, transparent);
+  transition: background 1.2s var(--ease), box-shadow 1.2s var(--ease), opacity 1.2s var(--ease);
+}
+.light-k { display: block; font-size: var(--fs-lead); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.light-k .unit { font-size: 16px; color: var(--faint); margin-left: 3px; }
+.light-b { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.daystrip { width: 100%; height: 96px; display: block; margin-top: auto; overflow: visible; }
+.daystrip .day-area { opacity: 0.85; }
+.daystrip .day-line { fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.6; }
+.daystrip .now-line { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 3; }
+.daystrip .now-dot { stroke: var(--surface); stroke-width: 2; }
+.daystrip .tick { fill: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 1081px) {
+  /* The chart sets its row's height; the long sensor list scrolls inside it. */
+  .sensors-card { contain: size; }
+  .sensor-list { overflow-y: auto; min-height: 0; flex: 1; scrollbar-width: thin; scrollbar-color: #ffffff22 transparent; }
+}
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 400px) {
+  .tiles { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 1081px) {
+  /* Alerts and rules share the column beside the floor plan; each scrolls on its own. */
+  .alerts-card, .rules-card { flex: 1 1 0; min-height: 0; }
+  .rules { overflow-y: auto; min-height: 0; flex: 1; scrollbar-width: thin; scrollbar-color: #ffffff22 transparent; margin-right: -8px; padding-right: 8px; }
+}

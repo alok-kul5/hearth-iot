@@ -15,8 +15,15 @@ const DOORS = {
   "door-front": { x1: 410, y1: 358, x2: 470, y2: 358, hinge: [410, 358], swing: -1 },
   "door-back": { x1: 340, y1: 2, x2: 392, y2: 2, hinge: [340, 2], swing: 1 },
 };
-const TYPE_LABEL = { temperature: "temperature", humidity: "humidity", motion: "motion", door: "door" };
-const UNIT = { temperature: "°C", humidity: "%" };
+const TYPE_LABEL = {
+  temperature: "temperature", humidity: "humidity", motion: "motion", door: "door",
+  co2: "CO₂", pm25: "PM2.5", voc: "VOC", tds: "water TDS", leak: "leak sensor",
+  ventilation: "ventilation", color_temp: "light colour", brightness: "light level",
+};
+const UNIT = { temperature: "°C", humidity: "%", co2: "ppm", pm25: "µg/m³", voc: "ppb", tds: "ppm", color_temp: "K", brightness: "%" };
+const DEC = { co2: 0, voc: 0, tds: 0, color_temp: 0, brightness: 0 };   // decimals shown; 1 for everything else
+const BINARY = { door: ["Open", "Closed"], motion: ["Motion", "Clear"], leak: ["Wet", "Dry"], ventilation: ["On", "Off"] };
+const decOf = (type) => DEC[type] ?? 1;
 
 const state = {
   sensors: new Map(),
@@ -27,6 +34,8 @@ const state = {
   minutes: 15,
   points: [],
   messages: [],          // timestamps of live readings, for the rate
+  automations: {},       // device -> { state, because: [alert keys] }
+  circadian: null,       // the light's schedule from /api/circadian
 };
 
 const time = (ts, sec = false) =>
@@ -39,14 +48,17 @@ const dur = (s) => {
 };
 const ago = (ts) => dur(Date.now() / 1000 - ts) + " ago";
 const roomOf = (s) => ROOMS[s.room]?.label ?? s.room.replace(/_/g, " ");
-const isBinary = (s) => s.type === "door" || s.type === "motion";
+const isBinary = (s) => s.type in BINARY;
 const fmtValue = (s, v = s.last_value) => {
   if (v == null) return { text: "–", unit: "" };
-  if (s.type === "door") return { text: v ? "Open" : "Closed", unit: "" };
-  if (s.type === "motion") return { text: v ? "Motion" : "Clear", unit: "" };
-  return { text: v.toFixed(1), unit: UNIT[s.type] ?? s.unit };
+  if (BINARY[s.type]) return { text: BINARY[s.type][v ? 0 : 1], unit: "" };
+  return { text: v.toFixed(decOf(s.type)), unit: UNIT[s.type] ?? s.unit };
 };
-const sensorName = (s) => (s.type === "door" ? (s.sensor_id === "door-front" ? "Front door" : "Back door") : `${roomOf(s)} ${TYPE_LABEL[s.type]}`);
+const sensorName = (s) => {
+  if (s.type === "door") return s.sensor_id === "door-front" ? "Front door" : "Back door";
+  if (s.type === "ventilation") return "Ventilation (ERV)";
+  return `${roomOf(s)} ${TYPE_LABEL[s.type] ?? s.type}`;
+};
 const alertingSensors = () => new Set([...state.active.values()].map((a) => a.sensor_id));
 // Alert text written from the rule and the reading, so the screen never shows the raw 2-decimal log message.
 function alertText(a, withValue = true) {
@@ -54,10 +66,12 @@ function alertText(a, withValue = true) {
   if (a.rule === "sensor_offline") return a.resolved_at ? "Went silent" : `No reading for over ${state.rules.stale_after_seconds} s`;
   const rule = state.rules.rules.find((r) => r.name === a.rule);
   if (s?.type === "door" || rule?.sensor_type === "door") return "Left open for over a minute";
+  if (rule?.sensor_type === "leak") return "Water detected";
   if (rule && a.value != null) {
     const unit = UNIT[rule.sensor_type] ?? "";
-    const where = `${rule.op.startsWith(">") ? "above" : "below"} the ${rule.threshold} ${unit} limit`;
-    return withValue ? `${a.value.toFixed(1)} ${unit}, ${where}` : where.charAt(0).toUpperCase() + where.slice(1);
+    let where = `${rule.op.startsWith(">") ? "above" : "below"} the ${rule.threshold} ${unit} limit`;
+    if (rule.activates?.length) where += ", ventilation on";
+    return withValue ? `${a.value.toFixed(decOf(rule.sensor_type))} ${unit}, ${where}` : where.charAt(0).toUpperCase() + where.slice(1);
   }
   return a.message;
 }
@@ -119,7 +133,7 @@ function patch(container, html, svgNS = false) {
   old.forEach((c, i) => morph(c, kids[i]));
   return true;
 }
-const numAttr = (s, v = s.last_value) => (v == null || isBinary(s) ? "" : `data-num="${v.toFixed(1)}" data-dec="1"`);
+const numAttr = (s, v = s.last_value) => (v == null || isBinary(s) ? "" : `data-num="${v.toFixed(decOf(s.type))}" data-dec="${decOf(s.type)}"`);
 
 /* ── Floor plan ────────────────────────────────────────── */
 function renderPlan() {
@@ -137,6 +151,10 @@ function renderPlan() {
     const hum = list.find((s) => s.type === "humidity");
     const motion = list.find((s) => s.type === "motion");
     const door = list.find((s) => s.type === "door");
+    const co2 = list.find((s) => s.type === "co2");
+    const pm = list.find((s) => s.type === "pm25");
+    const leak = list.find((s) => s.type === "leak");
+    const erv = list.find((s) => s.type === "ventilation");
     const primary = temp ?? hum ?? motion ?? door;
     const alerting = list.some((s) => bad.has(s.sensor_id));
     const selected = list.some((s) => s.sensor_id === state.selected);
@@ -145,7 +163,7 @@ function renderPlan() {
     if (key === "hallway") {
       const on = motion?.last_value === 1;
       body = `<text class="room-name" x="${x}" y="${r.y + (C ? 25 : 24)}">${r.label}</text>
-        <text class="sub" x="${x}" y="${r.y + (C ? 48 : 44)}">${motion ? (motion.online ? (on ? "Someone is moving" : "No movement") : "Sensor offline") : "No sensor"}</text>
+        <text class="sub" x="${x}" y="${r.y + (C ? 48 : 44)}">${motion ? (motion.online ? (on ? "Someone is moving" : "No movement") : "Sensor offline") : "No sensor"}${erv?.last_value === 1 ? " · ERV running" : ""}</text>
         <circle class="motion-ring ${on ? "active" : ""}" cx="${r.x + r.w - 30}" cy="${r.y + r.h / 2}" r="8"/>
         <circle class="motion-dot ${on ? "active" : ""}" cx="${r.x + r.w - 30}" cy="${r.y + r.h / 2}" r="6"/>`;
     } else if (primary) {
@@ -156,6 +174,9 @@ function renderPlan() {
         <text class="reading ${pBad ? "bad" : ""} ${off ? "offline" : ""}" x="${x}" y="${r.y + (C ? 74 : 62)}" ${numAttr(primary)}>${v.text}<tspan class="unit" dx="3">${v.unit}</tspan></text>`;
       const extra = [];
       if (temp && hum) extra.push({ s: hum, t: `Humidity ${fmtValue(hum).text} %` });
+      if (co2) extra.push({ s: co2, t: `CO₂ ${fmtValue(co2).text} ppm` });
+      if (pm) extra.push({ s: pm, t: `PM2.5 ${fmtValue(pm).text} µg/m³` });
+      if (leak) extra.push({ s: leak, t: leak.last_value === 1 ? "Leak detected" : "No leaks" });
       if (door && primary !== door) extra.push({ s: door, t: `${door.sensor_id === "door-back" ? "Back door" : "Door"} ${fmtValue(door).text.toLowerCase()}` });
       if (off) extra.unshift({ s: primary, t: `Offline · last ${ago(primary.last_ts)}` });
       else if (!C && !extra.length && primary.last_ts) extra.push({ s: { sensor_id: "" }, t: `Updated ${ago(primary.last_ts)}`, faint: true });
@@ -276,11 +297,106 @@ function renderRules() {
   const pretty = (n) => n.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
   const unitFor = (t) => UNIT[t] ?? "";
   const items = state.rules.rules.map((r) => {
-    const cond = r.sensor_type === "door" ? "Open" : `${r.op === ">" ? "Above" : r.op === "<" ? "Below" : r.op} ${r.threshold}${unitFor(r.sensor_type) ? " " + unitFor(r.sensor_type) : ""}`;
-    return `<li><span class="r-name">${pretty(r.name)}</span><span class="r-cond">${cond}${r.for_seconds ? ` for ${r.for_seconds} s` : ""}</span></li>`;
+    const cond = r.sensor_type === "door" ? "Open" : r.sensor_type === "leak" ? "Wet" : `${r.op === ">" ? "Above" : r.op === "<" ? "Below" : r.op} ${r.threshold}${unitFor(r.sensor_type) ? " " + unitFor(r.sensor_type) : ""}`;
+    const secs = r.for_seconds >= 120 ? ` for ${r.for_seconds / 60} min` : r.for_seconds ? ` for ${r.for_seconds} s` : "";
+    const name = pretty(r.name).replace("Co2", "CO₂").replace("Pm25", "PM2.5").replace("Voc", "VOC").replace("Tds", "TDS");
+    return `<li><span class="r-name">${name}${r.activates?.length ? `<small class="r-act">runs ventilation</small>` : ""}</span><span class="r-cond">${cond}${secs}</span></li>`;
   });
   items.push(`<li><span class="r-name">Sensor offline</span><span class="r-cond">Silent for ${state.rules.stale_after_seconds} s</span></li>`);
   $("#rules").innerHTML = items.join("");
+}
+
+/* ── Air and water ─────────────────────────────────────── */
+// Bands for the tiles. Limits match rules.yaml; "good" levels follow WHO / common indoor-air guidance.
+const WELLNESS = [
+  { id: "co2-living", label: "CO₂", where: "Living room", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2) },
+  { id: "co2-bedroom", label: "CO₂", where: "Bedroom", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2) },
+  { id: "pm25-kitchen", label: "PM2.5", where: "Kitchen", max: 100, band: (v) => (v <= 15 ? 0 : v <= 35 ? 1 : 2) },
+  { id: "voc-living", label: "VOC", where: "Living room", max: 1200, band: (v) => (v < 300 ? 0 : v <= 500 ? 1 : 2) },
+  { id: "tds-kitchen", label: "Water TDS", where: "Kitchen tap", max: 500, band: (v) => (v < 30 || v > 300 ? 2 : v > 250 ? 1 : 0) },
+  { id: "leak-bathroom", label: "Leak", where: "Bathroom sink", band: (v) => (v ? 2 : 0) },
+];
+const BAND = [["good", "Good"], ["fair", "Fair"], ["poor", "Poor"]];
+
+function ventilationText() {
+  const erv = state.sensors.get("erv-main");
+  const auto = state.automations["erv-main"];
+  const on = erv ? erv.last_value === 1 : auto?.state === "ON";
+  if (!on) return { on, text: "Ventilation off" };
+  const why = (auto?.because ?? []).map((k) => state.sensors.get(k.split(":")[0])).filter(Boolean);
+  if (!why.length) return { on, text: "Ventilation on" };
+  return { on, text: `Ventilation on · ${why.map((s) => `${TYPE_LABEL[s.type]} in ${roomOf(s).toLowerCase()}`).join(", ")}` };
+}
+
+function renderWellness() {
+  const bad = alertingSensors();
+  const tiles = WELLNESS.map((w) => {
+    const s = state.sensors.get(w.id);
+    if (!s) return `<button type="button" class="tile" disabled><span class="t-label">${w.label}<small>${w.where}</small></span><span class="t-value">–</span></button>`;
+    const v = fmtValue(s);
+    const off = !s.online;
+    const b = s.last_value == null ? 0 : w.band(s.last_value);
+    const thr = thresholdFor(s);
+    const bar = w.max && s.last_value != null
+      ? `<span class="t-bar"><span class="t-fill ${BAND[b][0]}" style="width: ${Math.min(100, (s.last_value / w.max) * 100).toFixed(1)}%"></span>${thr != null ? `<span class="t-limit" style="left: ${((thr / w.max) * 100).toFixed(1)}%"></span>` : ""}</span>`
+      : `<span class="t-bar"></span>`;
+    const chip = s.type === "leak" ? (s.last_value ? "Water detected" : "Dry") : BAND[b][1];
+    return `<button type="button" class="tile ${bad.has(w.id) ? "alerting" : ""}" data-id="${w.id}" aria-current="${w.id === state.selected}">
+      <span class="t-label">${w.label}<small>${w.where}</small></span>
+      <span class="t-value ${off ? "offline" : ""}" ${off ? "" : numAttr(s)}>${off ? "Offline" : v.text}${!off && v.unit ? `<span class="unit">${v.unit}</span>` : ""}</span>
+      <span class="chip ${BAND[b][0]}">${chip}</span>
+      ${bar}
+    </button>`;
+  }).join("");
+  patch($("#tiles"), tiles);
+  $("#tiles").querySelectorAll(".tile[data-id]").forEach((t) => (t.onclick = () => select(t.dataset.id)));
+  const vt = ventilationText();
+  const erv = $("#erv");
+  erv.textContent = vt.text;
+  erv.classList.toggle("on", vt.on);
+}
+
+/* ── Circadian light ──────────────────────────────────── */
+// Colour of a black-body light at `k` kelvin (Tanner Helland's approximation).
+function kelvinRGB(k) {
+  const t = k / 100;
+  let r, g, b;
+  if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; }
+  else { r = 329.698727446 * (t - 60) ** -0.1332047592; g = 288.1221695283 * (t - 60) ** -0.0755148492; }
+  if (t >= 66) b = 255; else if (t <= 19) b = 0; else b = 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  const c = (v) => Math.round(Math.min(255, Math.max(0, v)));
+  return `rgb(${c(r)}, ${c(g)}, ${c(b)})`;
+}
+const phase = (h) => (h < 5.5 ? "Night light" : h < 8 ? "Sunrise" : h < 12 ? "Morning" : h < 15 ? "Midday" : h < 18 ? "Afternoon" : h < 20 ? "Evening" : h < 23 ? "Winding down" : "Night light");
+
+function renderLight() {
+  const k = state.sensors.get("light-living-kelvin"), b = state.sensors.get("light-living-level");
+  const c = state.circadian;
+  const kelvin = k?.last_value ?? c?.target.kelvin, level = b?.last_value ?? c?.target.brightness;
+  if (kelvin == null) return;
+  const rgb = kelvinRGB(kelvin);
+  const bulb = $("#bulb");
+  bulb.style.setProperty("--bulb", rgb);
+  bulb.style.setProperty("--glow", (0.15 + (level / 100) * 0.85).toFixed(2));
+  $("#light-k").innerHTML = `${Math.round(kelvin)}<span class="unit">K</span>`;
+  $("#light-b").textContent = `${Math.round(level)} % brightness`;
+  if (!c) return;
+  $("#light-sub").textContent = `${phase(c.hour)} · living room · ${c.timezone.replace("_", " ")}`;
+  // The day as a strip: colour = colour temperature, height = brightness, with a marker at now.
+  const svg = $("#daystrip");
+  const W = svg.clientWidth || 300, H = 96, T = 8, B = 20, n = c.schedule.length;
+  const X = (h) => (h / 24) * W, Y = (pct) => T + (1 - pct / 100) * (H - T - B);
+  const stops = c.schedule.map((p, i) => `<stop offset="${((i / (n - 1)) * 100).toFixed(1)}%" stop-color="${kelvinRGB(p.kelvin)}"/>`).join("");
+  const top = c.schedule.map((p, i) => `${i ? "L" : "M"} ${X(p.hour).toFixed(1)} ${Y(p.brightness).toFixed(1)}`).join(" ");
+  const nx = X(c.hour);
+  const labels = [0, 6, 12, 18, 24].map((h) => `<text class="tick" x="${X(h)}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h % 24).padStart(2, "0")}:00</text>`).join("");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = `<defs><linearGradient id="kgrad" x1="0" x2="1" y1="0" y2="0">${stops}</linearGradient></defs>
+    <path class="day-area" d="${top} L ${W} ${H - B} L 0 ${H - B} Z" fill="url(#kgrad)"/>
+    <path class="day-line" d="${top}"/>
+    <line class="now-line" x1="${nx}" x2="${nx}" y1="${T - 6}" y2="${H - B}"/>
+    <circle class="now-dot" cx="${nx}" cy="${Y(level)}" r="4.5" style="fill: ${rgb}"/>
+    ${labels}`;
 }
 
 /* ── History chart (SVG, drawn from the points) ────────── */
@@ -315,7 +431,8 @@ function renderChart() {
   if (bad(s)) { note.textContent = thr != null ? `Above the ${thr} ${v.unit} limit` : "Alert open"; note.className = "lead-note bad"; }
   else if (pts.length && !isBinary(s)) {
     const vals = pts.map((p) => p.value);
-    note.textContent = `Range ${Math.min(...vals).toFixed(1)}–${Math.max(...vals).toFixed(1)} ${v.unit} in this window`;
+    const d = decOf(s.type);
+    note.textContent = `Range ${Math.min(...vals).toFixed(d)}–${Math.max(...vals).toFixed(d)} ${v.unit} in this window`;
     note.className = "lead-note";
   } else note.textContent = "";
 
@@ -338,7 +455,7 @@ function renderChart() {
     else d += `${i ? " L" : "M"} ${X(p.ts).toFixed(1)} ${Y(p.value).toFixed(1)}`;
   });
   const grid = yt.map((t) => `<line class="gridline" x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}"/>
-    <text class="tick" x="${L - 8}" y="${Y(t) + 4}" text-anchor="end">${isBinary(s) ? (t ? (s.type === "door" ? "Open" : "Yes") : (s.type === "door" ? "Shut" : "No")) : t}</text>`).join("");
+    <text class="tick" x="${L - 8}" y="${Y(t) + 4}" text-anchor="end">${isBinary(s) ? BINARY[s.type][t ? 0 : 1] : t}</text>`).join("");
   // X labels: one step, on round minutes.
   const span = x1 - x0, stepS = [60, 120, 300, 600, 900, 1800, 3600, 7200].find((st) => span / st <= 6) ?? 7200;
   let xl = "";
@@ -400,7 +517,7 @@ function animateLead(s, v) {
   const step = (now) => {
     if (token !== animateLead.token) return; // a newer reading took over
     const k = Math.min(1, (now - t0) / 450), e = 1 - (1 - k) ** 3;
-    el.innerHTML = `${(from + (target - from) * e).toFixed(1)}<span class="unit">${v.unit}</span>`;
+    el.innerHTML = `${(from + (target - from) * e).toFixed(decOf(s.type))}<span class="unit">${v.unit}</span>`;
     if (k < 1 && leadShown.id === s.sensor_id) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
@@ -480,7 +597,7 @@ function scheduleRender() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderPlan(); renderSummary(); renderAlerts(); renderSensors(); renderLog(); renderChart();
+    renderPlan(); renderSummary(); renderAlerts(); renderSensors(); renderLog(); renderChart(); renderWellness(); renderLight();
   });
 }
 
@@ -497,6 +614,7 @@ function connect() {
     const m = JSON.parse(e.data);
     if (m.kind === "reading") onReading(m.data);
     else if (m.kind === "alert") onAlert(m.event, m.data);
+    else if (m.kind === "automation") { state.automations = m.data; scheduleRender(); }
   };
   ws.onclose = () => {
     setStatus("down", "Reconnecting");
@@ -505,9 +623,12 @@ function connect() {
 }
 
 async function loadAll() {
-  const [sensors, active, log, rules] = await Promise.all([
+  const [sensors, active, log, rules, automations, circadian] = await Promise.all([
     getJSON("/api/sensors"), getJSON("/api/alerts?active=true"), getJSON("/api/alerts?limit=12"), getJSON("/api/rules"),
+    getJSON("/api/automations"), getJSON("/api/circadian"),
   ]);
+  state.automations = automations;
+  state.circadian = circadian;
   state.sensors = new Map(sensors.map((s) => [s.sensor_id, s]));
   state.active = new Map(active.map((a) => [a.key, a]));
   state.log = log;
@@ -529,6 +650,11 @@ setInterval(() => {
   const last = Math.max(0, ...[...state.sensors.values()].map((s) => s.last_ts ?? 0));
   $("#stamp").textContent = last ? `Last reading ${time(last, true)}` : "";
 }, 1000);
+// Every minute: where we are in the circadian day.
+setInterval(async () => {
+  state.circadian = await getJSON("/api/circadian").catch(() => state.circadian);
+  scheduleRender();
+}, 60000);
 // Every 5 s: online flags from the server (offline detection lives there).
 setInterval(async () => {
   const sensors = await getJSON("/api/sensors").catch(() => null);
