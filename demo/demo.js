@@ -337,16 +337,17 @@
   /* ── A note saying what this page is ────────────────── */
   document.addEventListener("DOMContentLoaded", () => {
     const style = document.createElement("style");
-    style.textContent = `.demo-note { margin-top: 10px; display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted); background: var(--raised); border-radius: 99px; padding: 5px 14px; }
+    style.textContent = `.demo-note { margin-top: 8px; font-size: 13px; line-height: 20px; color: var(--muted); }
       .demo-note strong { color: var(--text); font-weight: 500; }
-      .demo-note a { color: var(--data); text-decoration: none; } .demo-note a:hover { text-decoration: underline; }`;
+      .demo-note a { color: var(--text); text-decoration: underline; text-decoration-color: var(--control); text-underline-offset: 3px; }
+      .demo-note a:hover { text-decoration-color: var(--text); }`;
     document.head.append(style);
     const note = document.createElement("p");
     note.className = "demo-note";
-    note.innerHTML = `<span><strong>Live demo:</strong> simulated in your browser</span><a href="https://github.com/alok-kul5/hearth-iot">Real MQTT + FastAPI stack on GitHub →</a>`;
+    note.innerHTML = `<strong>Live demo, simulated in your browser.</strong> The real version runs on MQTT, Mosquitto and FastAPI: <a href="https://github.com/alok-kul5/hearth-iot">see the code on GitHub</a>.`;
     document.querySelector(".title-row > div")?.append(note);
-    const [a, b, c] = document.querySelectorAll(".pipeline > span:not(.rate)");
-    if (a && b && c) { a.textContent = "Simulator"; b.textContent = "Rules"; c.textContent = "Browser"; }
+    const via = document.getElementById("via");
+    if (via) via.textContent = "Simulated in this browser";
     document.title = "Hearth · Live demo";
   });
 })();
