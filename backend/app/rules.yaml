@@ -3,6 +3,13 @@
 # A rule fires when `value <op> threshold` holds for at least `for_seconds`
 # (0 = immediately). It resolves on its own once a reading is back in range.
 # `{value}` and `{threshold}` in the message are filled in when the alert opens.
+#
+# Optional:
+#   clear_at   hysteresis. Once open, the alert stays open until the value is back
+#              past this level, so a fan doesn't flick on and off around the limit.
+#   activates  devices the backend keeps switched on (MQTT `hearth/cmd/{device}` ON)
+#              while the alert is open. A device shared by several rules stays on
+#              until the last of them resolves.
 
 stale_after_seconds: 30   # a sensor with no reading for this long is reported offline
 
@@ -44,3 +51,63 @@ rules:
     for_seconds: 60
     severity: warning
     message: "Door has been open for over a minute"
+
+  # --- Wellness: air ---------------------------------------------------------
+  # Thresholds follow common indoor air guidance: CO2 above ~1000 ppm is a sign of
+  # poor ventilation, the WHO 24 h guideline for PM2.5 is 15 µg/m³ and the US EPA
+  # daily standard 35 µg/m³, and TVOC above ~500 ppb is generally rated poor.
+
+  - name: co2_high
+    sensor_type: co2
+    op: ">"
+    threshold: 1000
+    for_seconds: 300
+    clear_at: 800
+    severity: warning
+    activates: [erv-main]
+    message: "CO2 is {value} ppm (above {threshold} ppm for 5 minutes), ventilation on"
+
+  - name: pm25_high
+    sensor_type: pm25
+    op: ">"
+    threshold: 35
+    for_seconds: 30
+    clear_at: 15
+    severity: warning
+    activates: [erv-main]
+    message: "PM2.5 is {value} µg/m³ (above {threshold} µg/m³), ventilation on"
+
+  - name: voc_high
+    sensor_type: voc
+    op: ">"
+    threshold: 500
+    for_seconds: 60
+    clear_at: 300
+    severity: warning
+    activates: [erv-main]
+    message: "VOCs are {value} ppb (above {threshold} ppb), ventilation on"
+
+  # --- Wellness: water -------------------------------------------------------
+
+  - name: water_leak
+    sensor_type: leak
+    op: "=="
+    threshold: 1
+    severity: critical
+    message: "Water detected"
+
+  - name: tds_high
+    sensor_type: tds
+    op: ">"
+    threshold: 300
+    for_seconds: 10
+    severity: warning
+    message: "Drinking water TDS is {value} ppm (above {threshold} ppm), check the filter"
+
+  - name: tds_low
+    sensor_type: tds
+    op: "<"
+    threshold: 30
+    for_seconds: 10
+    severity: warning
+    message: "Drinking water TDS is {value} ppm (below {threshold} ppm)"

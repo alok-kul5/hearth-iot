@@ -33,13 +33,26 @@ class Rule:
     severity: str = "warning"
     for_seconds: float = 0
     message: str = "{value} breached {threshold}"
+    clear_at: float | None = None   # hysteresis: once open, stay open until the value is back past this
+    activates: tuple[str, ...] = ()  # devices to keep switched on while the alert is open
 
     def __post_init__(self) -> None:
         if self.op not in OPS:
             raise ValueError(f"rule {self.name}: unknown operator {self.op!r}")
+        object.__setattr__(self, "activates", tuple(self.activates))
+        if self.clear_at is not None:
+            if self.op == "==":
+                raise ValueError(f"rule {self.name}: clear_at needs a <, <=, > or >= rule")
+            wrong_side = self.clear_at > self.threshold if self.op.startswith(">") else self.clear_at < self.threshold
+            if wrong_side:
+                raise ValueError(f"rule {self.name}: clear_at must be on the safe side of the threshold")
 
     def breached(self, value: float) -> bool:
         return OPS[self.op](value, self.threshold)
+
+    def still_breached(self, value: float) -> bool:
+        """For an alert that is already open: has the value not yet cleared?"""
+        return OPS[self.op](value, self.threshold if self.clear_at is None else self.clear_at)
 
 
 OFFLINE_RULE = "sensor_offline"
@@ -86,9 +99,11 @@ class AlertEngine:
             if rule.sensor_type != r.type:
                 continue
             k = self.key(r.sensor_id, rule.name)
-            if rule.breached(r.value):
+            if k in self._open and rule.still_breached(r.value):
+                continue
+            if k not in self._open and rule.breached(r.value):
                 since = self._breach_since.setdefault(k, r.ts)
-                if k not in self._open and r.ts - since >= rule.for_seconds:
+                if r.ts - since >= rule.for_seconds:
                     self._open.add(k)
                     events.append(
                         AlertEvent(
@@ -126,6 +141,9 @@ class AlertEngine:
                     )
                 )
         return events
+
+    def rule(self, name: str) -> Rule | None:
+        return next((r for r in self.rules if r.name == name), None)
 
     def is_online(self, sensor_id: str, now: float) -> bool:
         last = self._last_seen.get(sensor_id)

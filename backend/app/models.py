@@ -4,7 +4,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SensorType = Literal["temperature", "humidity", "motion", "door"]
+SensorType = Literal[
+    "temperature", "humidity", "motion", "door",
+    "co2", "pm25", "voc", "tds", "leak", "ventilation", "color_temp", "brightness",
+]
 
 
 class Reading(BaseModel):

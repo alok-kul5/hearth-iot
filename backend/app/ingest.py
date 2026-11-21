@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from pydantic import ValidationError
 
+from .automations import Automations
 from .models import AlertEvent, Reading
 from .rules import AlertEngine
 from .storage import Storage
@@ -19,10 +20,19 @@ Broadcast = Callable[[dict], None]
 
 
 class Ingestor:
-    def __init__(self, storage: Storage, engine: AlertEngine, broadcast: Broadcast | None = None) -> None:
+    def __init__(
+        self,
+        storage: Storage,
+        engine: AlertEngine,
+        broadcast: Broadcast | None = None,
+        automations: Automations | None = None,
+        on_reading: Callable[[dict], None] | None = None,
+    ) -> None:
         self.storage = storage
         self.engine = engine
         self.broadcast = broadcast or (lambda msg: None)
+        self.automations = automations or Automations([])
+        self.on_reading = on_reading or (lambda sensor: None)  # e.g. Home Assistant discovery
         self.received = 0
         self.rejected = 0
         self._lock = threading.Lock()  # engine state is touched by the MQTT thread and the offline checker
@@ -42,6 +52,7 @@ class Ingestor:
         self.received += 1
         self.storage.add_reading(reading)
         self.broadcast({"kind": "reading", "data": reading.model_dump()})
+        self.on_reading(reading.model_dump())
         with self._lock:
             events = self.engine.evaluate(reading)
         self._publish_alerts(events)
@@ -58,3 +69,5 @@ class Ingestor:
             if row is not None:
                 log.info("alert %s: %s %s", e.kind, e.key, e.message)
                 self.broadcast({"kind": "alert", "event": e.kind, "data": row})
+            if self.automations.apply(e):
+                self.broadcast({"kind": "automation", "data": self.automations.state()})
