@@ -118,7 +118,7 @@ h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
 .room .sub.bad, .room .reading.bad { fill: var(--negative); }
 .room .offline { fill: var(--faint); }
 .door-frame { stroke: var(--surface); stroke-width: 6; stroke-linecap: butt; }
-.door { stroke-width: 4; stroke-linecap: round; stroke: var(--text); transition: transform 0.6s var(--ease), stroke 0.2s var(--ease); }
+.door { stroke-width: 3; stroke-linecap: round; stroke: var(--text); transition: transform 0.6s var(--ease), stroke 0.2s var(--ease); }
 .door.alerting { stroke: var(--negative); }
 .door-swing { fill: none; stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; }
 .door-swing.open { opacity: 1; }

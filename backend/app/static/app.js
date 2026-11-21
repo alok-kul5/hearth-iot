@@ -197,7 +197,10 @@ function renderPlan() {
     const open = s.last_value === 1;
     const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
     const [hx, hy] = d.hinge;
-    const swing = `M ${d.x2} ${d.y2} A ${len} ${len} 0 0 ${d.swing > 0 ? 1 : 0} ${hx} ${hy + d.swing * -len}`;
+    // The swing arc runs from the closed door's free end to where that end sits when open.
+    const rad = (d.swing * 72 * Math.PI) / 180, vx = d.x2 - hx, vy = d.y2 - hy;
+    const ex = hx + vx * Math.cos(rad) - vy * Math.sin(rad), ey = hy + vx * Math.sin(rad) + vy * Math.cos(rad);
+    const swing = `M ${d.x2} ${d.y2} A ${len} ${len} 0 0 ${d.swing > 0 ? 1 : 0} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
     const angle = open ? d.swing * 72 : 0;
     out += `<path class="door-swing ${open ? "open" : ""}" d="${swing}"/>
       <line class="door-frame" x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}"/>
@@ -663,7 +666,7 @@ async function loadAll() {
 setInterval(() => {
   const cutoff = Date.now() - 60000;
   while (state.messages.length && state.messages[0] < cutoff) state.messages.shift();
-  $("#rate").textContent = `${state.messages.length} readings/min`;
+  $("#rate").textContent = state.messages.length ? `${state.messages.length} readings/min` : "";
   const last = Math.max(0, ...[...state.sensors.values()].map((s) => s.last_ts ?? 0));
   $("#stamp").textContent = last ? `Last reading ${time(last, true)}` : "";
 }, 1000);
