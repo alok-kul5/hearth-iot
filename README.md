@@ -6,6 +6,8 @@
 
 <p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><b>Live demo →</b></a></p>
 
+<p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><img src="docs/demo.gif" width="860" alt="Cooking dinner in the demo: smoke rises in the kitchen, PM2.5 crosses its limit, the ventilation switches on and pulls the air out, then the light is dragged through the day"></a></p>
+
 [![CI](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml)
 
 The [live demo](https://alok-kul5.github.io/hearth-iot/) runs the same dashboard with the
@@ -34,6 +36,16 @@ stack starts with one command and runs entirely on the local network.
   time of day, from cool and bright at midday to warm and dim in the evening.
 - **Home Assistant:** MQTT Discovery configs for every sensor, grouped into one device
   per room. The ERV appears as a switch that Home Assistant can control.
+- **A plan that shows the air:** CO2 and VOCs drift through each room as a haze that
+  thickens with the reading and turns red over the limit, cooking smoke rises off the hob,
+  the ERV fan spins and pulls air out of every room, a leak ripples under the sink, and the
+  living room glows in the light's real colour. All of it is drawn from the live readings.
+- **Make something happen:** buttons to cook dinner, have friends over, spray cleaner or
+  spill water. Each sends an event to the simulator (`POST /api/simulate/{event}`, MQTT
+  `hearth/cmd/sim`), so you can watch the rules and the ventilation respond. The live demo
+  adds "Skip ahead 10 min", which plays the next ten minutes as a three-second time-lapse.
+- **Drag through the day:** the light's day chart is a scrubber; drag across it to see the
+  colour and brightness the light would have at any hour.
 - **Alerts:** threshold rules in YAML, offline detection, and a live dashboard with a
   floor plan, history charts and an alert log.
 
@@ -268,6 +280,7 @@ retained on Mosquitto. Home Assistant itself was not run for this project.
 | GET | `/api/automations` | Devices switched by rules, their state, and which alerts keep them on |
 | GET | `/api/circadian` | The light's schedule for the day and the current setpoint |
 | GET | `/api/homeassistant/discovery` | The MQTT Discovery configs published for Home Assistant |
+| POST | `/api/simulate/{event}` | Start `cooking`, `guests`, `spray` or `leak` in the simulated home (off with `SIMULATOR_CONTROLS=0`) |
 | WS | `/ws` | Live stream of `reading`, `alert` and `automation` messages |
 
 ## Development
