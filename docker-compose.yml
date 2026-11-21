@@ -17,6 +17,7 @@ services:
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
+      TIMEZONE: ${TIMEZONE:-UTC}       # drives the circadian light schedule
     ports:
       - "8000:8000"
     volumes:
@@ -31,6 +32,7 @@ services:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
       PUBLISH_INTERVAL: 2
+      TIMEZONE: ${TIMEZONE:-UTC}       # when people are home, asleep or cooking
     depends_on:
       mosquitto:
         condition: service_healthy

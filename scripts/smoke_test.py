@@ -3,7 +3,7 @@
 Waits until every simulated sensor has reported through MQTT into the backend,
 then checks the history endpoint and the dashboard page.
 
-    python scripts/smoke_test.py --url http://localhost:8000 --sensors 8
+    python scripts/smoke_test.py --url http://localhost:8000 --sensors 17
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def get(url: str):
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--url", default="http://localhost:8000")
-    p.add_argument("--sensors", type=int, default=8)
+    p.add_argument("--sensors", type=int, default=17)
     p.add_argument("--timeout", type=float, default=90)
     a = p.parse_args()
 
@@ -48,6 +48,10 @@ def main() -> int:
     hist = get(f"{a.url}/api/sensors/{sensors[0]['sensor_id']}/history?minutes=5")
     assert hist, "history is empty"
     assert "Hearth" in get(f"{a.url}/"), "dashboard page missing"
+    discovery = get(f"{a.url}/api/homeassistant/discovery")
+    assert len(discovery) == len(sensors), "a sensor has no Home Assistant discovery config"
+    assert "erv-main" in get(f"{a.url}/api/automations"), "ventilation automation missing"
+    assert get(f"{a.url}/api/circadian")["schedule"], "circadian schedule missing"
     print(f"OK: {len(sensors)} sensors live, {len(hist)} history points for {sensors[0]['sensor_id']}")
     return 0
 
