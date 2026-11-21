@@ -2,18 +2,18 @@
 
 const $ = (s) => document.querySelector(s);
 const ROOMS = {
-  // The flat, drawn to the plan's 600 x 360 viewBox. 8px gaps are the walls.
-  living_room: { label: "Living room", x: 0, y: 0, w: 296, h: 206 },
-  kitchen: { label: "Kitchen", x: 304, y: 0, w: 166, h: 140 },
-  bathroom: { label: "Bathroom", x: 478, y: 0, w: 122, h: 140 },
-  hallway: { label: "Hallway", x: 304, y: 148, w: 296, h: 58 },
-  bedroom: { label: "Bedroom", x: 0, y: 214, w: 296, h: 146 },
-  entrance: { label: "Entrance", x: 304, y: 214, w: 296, h: 146 },
+  // The flat, drawn to the plan's 600 x 326 viewBox. 8px gaps are the walls.
+  living_room: { label: "Living room", x: 0, y: 0, w: 296, h: 186 },
+  kitchen: { label: "Kitchen", x: 304, y: 0, w: 166, h: 124 },
+  bathroom: { label: "Bathroom", x: 478, y: 0, w: 122, h: 124 },
+  hallway: { label: "Hallway", x: 304, y: 132, w: 296, h: 54 },
+  bedroom: { label: "Bedroom", x: 0, y: 194, w: 296, h: 132 },
+  entrance: { label: "Entrance", x: 304, y: 194, w: 296, h: 132 },
 };
 // Where each door sits on its room's outer wall.
 const DOORS = {
-  "door-front": { x1: 410, y1: 358, x2: 470, y2: 358, hinge: [410, 358], swing: -1 },
-  "door-back": { x1: 340, y1: 2, x2: 392, y2: 2, hinge: [340, 2], swing: 1 },
+  "door-front": { x1: 530, y1: 324, x2: 590, y2: 324, hinge: [530, 324], swing: -1 },
+  "door-back": { x1: 462, y1: 2, x2: 414, y2: 2, hinge: [462, 2], swing: -1 },
 };
 const TYPE_LABEL = {
   temperature: "temperature", humidity: "humidity", motion: "motion", door: "door",
@@ -230,36 +230,60 @@ function renderSummary() {
   const shape = `${online}/${all.length}/${alerts.length}`;
   if (sum.innerHTML !== text) {
     sum.innerHTML = text;
-    if (sum.dataset.shape !== shape && sum.dataset.shape && !reduced()) sum.animate([{ opacity: 0.2, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 500, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
     sum.dataset.shape = shape;
   }
-  $("#scope").textContent = `${all.length} sensors · ${new Set(all.map((s) => s.room)).size} rooms`;
+  $("#scope").textContent = `${all.length} sensors in ${new Set(all.map((s) => s.room)).size} rooms`;
   $("#online-count").textContent = `${online} of ${all.length} online`;
 }
 
 /* ── Alerts ────────────────────────────────────────────── */
+// The cleared list fills the card's spare height and stops at the last row that fits whole.
+function fitCleared() {
+  const ul = $("#alerts");
+  if (getComputedStyle(ul).overflowY !== "auto") {  // stacked layouts: keep three
+    ul.querySelectorAll(".alert.cleared").forEach((li, i) => i >= 3 && li.remove());
+  } else {
+    let rows = [...ul.querySelectorAll(".alert.cleared")];
+    while (rows.length && ul.scrollHeight > ul.clientHeight + 1) rows.pop().remove();
+  }
+  const head = ul.querySelector(".sub-head");
+  if (head && !ul.querySelector(".alert.cleared")) head.remove();
+}
+
 function renderAlerts() {
   const list = [...state.active.values()].sort((a, b) => b.opened_at - a.opened_at);
   const badge = $("#alert-count");
-  if (badge.textContent !== String(list.length) && !reduced()) badge.animate([{ transform: "scale(1.35)" }, { transform: "scale(1)" }], { duration: 450, easing: "cubic-bezier(0.34, 1.6, 0.64, 1)" });
   badge.textContent = list.length;
   $("#alert-count").classList.toggle("hot", list.length > 0);
   if (!list.length) {
-    $("#alerts").innerHTML = `<li class="all-clear"><strong>Nothing needs attention</strong>Every sensor is reporting and in range.</li>`;
+    const done = state.log.filter((a) => a.resolved_at != null).slice(0, 8);
+    const nowS = Date.now() / 1000;
+    $("#alerts").innerHTML = `<li class="all-clear"><strong>All clear</strong>Every sensor is reporting and every reading is in range.</li>` +
+      (done.length ? `<li class="sub-head">Cleared recently</li>` + done.map((a) => {
+        const s = state.sensors.get(a.sensor_id);
+        return `<li class="alert cleared"><span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">${dur(nowS - a.resolved_at)} ago</span><span class="what">${esc(alertText(a, false))}, lasted ${dur(a.resolved_at - a.opened_at)}</span></li>`;
+      }).join("") : "");
+    fitCleared();
     return;
   }
   const now = Date.now() / 1000;
-  const seen = (renderAlerts.seen ??= new Set());
-  const html = list.slice(0, 5).map((a) => {
+  const html = list.slice(0, 6).map((a) => {
     const s = state.sensors.get(a.sensor_id);
-    return `<li class="alert ${seen.has(a.key) ? "" : "enter"}">
-      <div class="top"><span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">${dur(now - a.opened_at)}</span></div>
+    return `<li class="alert">
+      <span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">for ${dur(now - a.opened_at)}</span>
       <span class="what">${esc(alertText(a))}</span>
       <span class="pill ${a.severity}">${a.severity === "critical" ? "Critical" : "Warning"}</span>
     </li>`;
   }).join("");
-  patch($("#alerts"), html);
-  list.forEach((a) => seen.add(a.key));
+  // Under the open alerts, the ones that cleared most recently, so the card shows what just happened.
+  const cleared = state.log.filter((a) => a.resolved_at != null).slice(0, 8);
+  const recent = cleared.length ? `<li class="sub-head">Cleared recently</li>` + cleared.map((a) => {
+    const s = state.sensors.get(a.sensor_id);
+    return `<li class="alert cleared"><span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">${dur(now - a.resolved_at)} ago</span>
+      <span class="what">${esc(alertText(a, false))}, lasted ${dur(a.resolved_at - a.opened_at)}</span></li>`;
+  }).join("") : "";
+  patch($("#alerts"), html + recent);
+  fitCleared();
 }
 
 /* ── Sensor list ───────────────────────────────────────── */
@@ -280,7 +304,7 @@ function renderSensors() {
 
 /* ── Alert log and rules ───────────────────────────────── */
 function renderLog() {
-  const rows = state.log.slice(0, 12);
+  const rows = state.log.slice(0, 8);
   if (!rows.length) {
     $("#log").innerHTML = `<tr><td colspan="5" class="log-empty">No alerts yet. They appear here when a reading crosses a rule.</td></tr>`;
     return;
@@ -294,29 +318,41 @@ function renderLog() {
 }
 
 function renderRules() {
-  const pretty = (n) => n.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-  const unitFor = (t) => UNIT[t] ?? "";
-  const items = state.rules.rules.map((r) => {
-    const cond = r.sensor_type === "door" ? "Open" : r.sensor_type === "leak" ? "Wet" : `${r.op === ">" ? "Above" : r.op === "<" ? "Below" : r.op} ${r.threshold}${unitFor(r.sensor_type) ? " " + unitFor(r.sensor_type) : ""}`;
-    const secs = r.for_seconds >= 120 ? ` for ${r.for_seconds / 60} min` : r.for_seconds ? ` for ${r.for_seconds} s` : "";
-    const name = pretty(r.name).replace("Co2", "CO₂").replace("Pm25", "PM2.5").replace("Voc", "VOC").replace("Tds", "TDS");
-    return `<li><span class="r-name">${name}${r.activates?.length ? `<small class="r-act">runs ventilation</small>` : ""}</span><span class="r-cond">${cond}${secs}</span></li>`;
+  const pretty = (n) => n.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+    .replace("Co2", "CO₂").replace("Pm25", "PM2.5").replace("Voc", "VOC").replace("Tds", "TDS");
+  const unitFor = (t) => (UNIT[t] ? " " + UNIT[t] : "");
+  const held = (sec) => (!sec ? "" : sec >= 120 ? ` for ${sec / 60} min` : ` for ${sec} s`);
+  const word = { ">": "above", ">=": "at or above", "<": "below", "<=": "at or below" };
+  const rows = state.rules.rules.map((r) => {
+    let opens, clears;
+    if (r.sensor_type === "door") { opens = `Open${held(r.for_seconds)}`; clears = "Closed"; }
+    else if (r.sensor_type === "leak") { opens = `Wet${held(r.for_seconds)}`; clears = "Dry"; }
+    else {
+      opens = `${word[r.op] ?? r.op} ${r.threshold}${unitFor(r.sensor_type)}${held(r.for_seconds)}`;
+      const back = r.clear_at ?? r.threshold;
+      clears = `${r.op.startsWith(">") ? "below" : "above"} ${back}${unitFor(r.sensor_type)}`;
+      opens = opens.charAt(0).toUpperCase() + opens.slice(1);
+      clears = clears.charAt(0).toUpperCase() + clears.slice(1);
+    }
+    const then = r.activates?.length ? "Ventilation on" : `<span class="r-grey">Alert only</span>`;
+    const sev = `<span class="pill ${r.severity}">${r.severity === "critical" ? "Critical" : "Warning"}</span>`;
+    return `<tr><td class="r-name">${pretty(r.name)}</td><td class="r-grey">${esc(TYPE_LABEL[r.sensor_type] ?? r.sensor_type)}</td><td>${opens}</td><td class="r-grey">${clears}</td><td>${then}</td><td>${sev}</td></tr>`;
   });
-  items.push(`<li><span class="r-name">Sensor offline</span><span class="r-cond">Silent for ${state.rules.stale_after_seconds} s</span></li>`);
-  $("#rules").innerHTML = items.join("");
+  rows.push(`<tr><td class="r-name">Sensor offline</td><td class="r-grey">any</td><td>No reading for ${state.rules.stale_after_seconds} s</td><td class="r-grey">Next reading</td><td><span class="r-grey">Alert only</span></td><td><span class="pill warning">Warning</span></td></tr>`);
+  $("#rules").innerHTML = rows.join("");
 }
 
 /* ── Air and water ─────────────────────────────────────── */
 // Bands for the tiles. Limits match rules.yaml; "good" levels follow WHO / common indoor-air guidance.
 const WELLNESS = [
-  { id: "co2-living", label: "CO₂", where: "Living room", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2) },
-  { id: "co2-bedroom", label: "CO₂", where: "Bedroom", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2) },
-  { id: "pm25-kitchen", label: "PM2.5", where: "Kitchen", max: 100, band: (v) => (v <= 15 ? 0 : v <= 35 ? 1 : 2) },
-  { id: "voc-living", label: "VOC", where: "Living room", max: 1200, band: (v) => (v < 300 ? 0 : v <= 500 ? 1 : 2) },
-  { id: "tds-kitchen", label: "Water TDS", where: "Kitchen tap", max: 500, band: (v) => (v < 30 || v > 300 ? 2 : v > 250 ? 1 : 0) },
-  { id: "leak-bathroom", label: "Leak", where: "Bathroom sink", band: (v) => (v ? 2 : 0) },
+  { id: "co2-living", label: "CO₂, living room", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2), ok: "Fresh" },
+  { id: "co2-bedroom", label: "CO₂, bedroom", max: 2000, band: (v) => (v < 800 ? 0 : v <= 1000 ? 1 : 2), ok: "Fresh" },
+  { id: "pm25-kitchen", label: "PM2.5, kitchen", max: 100, band: (v) => (v <= 15 ? 0 : v <= 35 ? 1 : 2), ok: "Clean" },
+  { id: "voc-living", label: "VOC, living room", max: 1200, band: (v) => (v < 300 ? 0 : v <= 500 ? 1 : 2), ok: "Low" },
+  { id: "tds-kitchen", label: "Water TDS, kitchen tap", max: 500, band: (v) => (v < 30 || v > 300 ? 2 : v > 250 ? 1 : 0), ok: "Filter working" },
+  { id: "leak-bathroom", label: "Leak, bathroom sink", band: (v) => (v ? 2 : 0), ok: "Dry" },
 ];
-const BAND = [["good", "Good"], ["fair", "Fair"], ["poor", "Poor"]];
+const BAND = ["good", "fair", "poor"];
 
 function ventilationText() {
   const erv = state.sensors.get("erv-main");
@@ -325,26 +361,29 @@ function ventilationText() {
   if (!on) return { on, text: "Ventilation off" };
   const why = (auto?.because ?? []).map((k) => state.sensors.get(k.split(":")[0])).filter(Boolean);
   if (!why.length) return { on, text: "Ventilation on" };
-  return { on, text: `Ventilation on · ${why.map((s) => `${TYPE_LABEL[s.type]} in ${roomOf(s).toLowerCase()}`).join(", ")}` };
+  return { on, text: `Ventilation on: ${why.map((s) => `${TYPE_LABEL[s.type]} in the ${roomOf(s).toLowerCase()}`).join(", ")}` };
 }
 
 function renderWellness() {
-  const bad = alertingSensors();
   const tiles = WELLNESS.map((w) => {
     const s = state.sensors.get(w.id);
-    if (!s) return `<button type="button" class="tile" disabled><span class="t-label">${w.label}<small>${w.where}</small></span><span class="t-value">–</span></button>`;
+    if (!s) return `<button type="button" class="tile" disabled><span class="t-label">${w.label}</span><span class="t-value offline">–</span><span class="t-note">No reading yet</span></button>`;
     const v = fmtValue(s);
     const off = !s.online;
     const b = s.last_value == null ? 0 : w.band(s.last_value);
     const thr = thresholdFor(s);
+    const rule = state.rules.rules.find((r) => r.sensor_type === s.type && r.op === ">");
+    let note = w.ok;
+    if (s.type === "leak") note = s.last_value ? "Water under the sink" : "No water detected";
+    else if (b === 2) note = s.type === "tds" && s.last_value < 30 ? "Very low" : `Over the ${rule?.threshold ?? ""} ${UNIT[s.type]} limit`;
+    else if (b === 1) note = s.type === "tds" ? "Filter wearing" : "Getting stale";
     const bar = w.max && s.last_value != null
-      ? `<span class="t-bar"><span class="t-fill ${BAND[b][0]}" style="width: ${Math.min(100, (s.last_value / w.max) * 100).toFixed(1)}%"></span>${thr != null ? `<span class="t-limit" style="left: ${((thr / w.max) * 100).toFixed(1)}%"></span>` : ""}</span>`
+      ? `<span class="t-bar"><span class="t-fill ${BAND[b]}" style="width: ${Math.min(100, (s.last_value / w.max) * 100).toFixed(1)}%"></span>${thr != null ? `<span class="t-limit" style="left: ${((thr / w.max) * 100).toFixed(1)}%"></span>` : ""}</span>`
       : `<span class="t-bar"></span>`;
-    const chip = s.type === "leak" ? (s.last_value ? "Water detected" : "Dry") : BAND[b][1];
-    return `<button type="button" class="tile ${bad.has(w.id) ? "alerting" : ""}" data-id="${w.id}" aria-current="${w.id === state.selected}">
-      <span class="t-label">${w.label}<small>${w.where}</small></span>
-      <span class="t-value ${off ? "offline" : ""}" ${off ? "" : numAttr(s)}>${off ? "Offline" : v.text}${!off && v.unit ? `<span class="unit">${v.unit}</span>` : ""}</span>
-      <span class="chip ${BAND[b][0]}">${chip}</span>
+    return `<button type="button" class="tile" data-id="${w.id}" aria-current="${w.id === state.selected}">
+      <span class="t-label">${w.label}</span>
+      <span class="t-value ${off ? "offline" : b === 2 ? "poor" : ""}" ${off ? "" : numAttr(s)}>${off ? "Offline" : v.text}${!off && v.unit ? `<span class="unit">${v.unit}</span>` : ""}</span>
+      <span class="t-note ${off ? "" : BAND[b]}">${off ? `Last seen ${ago(s.last_ts)}` : note}</span>
       ${bar}
     </button>`;
   }).join("");
@@ -377,25 +416,24 @@ function renderLight() {
   const rgb = kelvinRGB(kelvin);
   const bulb = $("#bulb");
   bulb.style.setProperty("--bulb", rgb);
-  bulb.style.setProperty("--glow", (0.15 + (level / 100) * 0.85).toFixed(2));
   $("#light-k").innerHTML = `${Math.round(kelvin)}<span class="unit">K</span>`;
   $("#light-b").textContent = `${Math.round(level)} % brightness`;
   if (!c) return;
-  $("#light-sub").textContent = `${phase(c.hour)} · living room · ${c.timezone.replace("_", " ")}`;
-  // The day as a strip: colour = colour temperature, height = brightness, with a marker at now.
+  $("#light-sub").textContent = `${phase(c.hour)}, ${c.timezone.replace("_", " ")} time`;
   const svg = $("#daystrip");
-  const W = svg.clientWidth || 300, H = 96, T = 8, B = 20, n = c.schedule.length;
-  const X = (h) => (h / 24) * W, Y = (pct) => T + (1 - pct / 100) * (H - T - B);
-  const stops = c.schedule.map((p, i) => `<stop offset="${((i / (n - 1)) * 100).toFixed(1)}%" stop-color="${kelvinRGB(p.kelvin)}"/>`).join("");
-  const top = c.schedule.map((p, i) => `${i ? "L" : "M"} ${X(p.hour).toFixed(1)} ${Y(p.brightness).toFixed(1)}`).join(" ");
-  const nx = X(c.hour);
-  const labels = [0, 6, 12, 18, 24].map((h) => `<text class="tick" x="${X(h)}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h % 24).padStart(2, "0")}:00</text>`).join("");
+  const W = svg.clientWidth || 300, H = Math.max(112, svg.clientHeight || 112), T = 18, B = 20, cols = c.schedule.slice(0, -1);
+  const cw = W / cols.length, Y = (pct) => T + (1 - pct / 100) * (H - T - B);
+  const bars = cols.map((p, i) => {
+    const y = Y(Math.max(2, p.brightness));
+    return `<rect x="${(i * cw + 0.5).toFixed(1)}" y="${y.toFixed(1)}" width="${(cw - 1).toFixed(1)}" height="${(H - B - y).toFixed(1)}" fill="${kelvinRGB(p.kelvin)}"><title>${String(Math.floor(p.hour)).padStart(2, "0")}:${p.hour % 1 ? "30" : "00"} · ${p.kelvin} K · ${p.brightness} %</title></rect>`;
+  }).join("");
+  const nx = (c.hour / 24) * W;
+  const labels = [0, 6, 12, 18, 24].map((h) => `<text class="tick" x="${(h / 24) * W}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h % 24).padStart(2, "0")}:00</text>`).join("");
+  const anchor = nx > W - 40 ? "end" : nx < 40 ? "start" : "middle";
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.innerHTML = `<defs><linearGradient id="kgrad" x1="0" x2="1" y1="0" y2="0">${stops}</linearGradient></defs>
-    <path class="day-area" d="${top} L ${W} ${H - B} L 0 ${H - B} Z" fill="url(#kgrad)"/>
-    <path class="day-line" d="${top}"/>
-    <line class="now-line" x1="${nx}" x2="${nx}" y1="${T - 6}" y2="${H - B}"/>
-    <circle class="now-dot" cx="${nx}" cy="${Y(level)}" r="4.5" style="fill: ${rgb}"/>
+  svg.innerHTML = `${bars}<line class="base" x1="0" x2="${W}" y1="${H - B + 0.5}" y2="${H - B + 0.5}"/>
+    <line class="now-line" x1="${nx}" x2="${nx}" y1="${T - 2}" y2="${H - B}"/>
+    <text class="now-label" x="${nx}" y="${T - 6}" text-anchor="${anchor}">Now</text>
     ${labels}`;
 }
 
@@ -543,36 +581,10 @@ function select(id) {
 }
 
 /* ── Live updates ──────────────────────────────────────── */
-const lastPacket = { t: 0 }, lastFlash = new Map();
 function pulseReading(r) {
   if (reduced()) return;
-  // Each room flashes at most once every 2.5 s, from a violet tint back to its own resting colour.
-  const g = document.querySelector(`#plan .room[data-room="${r.room}"]`);
-  const nowMs = performance.now();
-  if (g && nowMs - (lastFlash.get(r.room) ?? 0) > 2500) {
-    lastFlash.set(r.room, nowMs);
-    const rest = g.classList.contains("alerting") ? "#3a1824" : g.classList.contains("selected") ? "#2c2639" : "#221d2e";
-    g.querySelector("rect.floor").animate([{ fill: "#34295a" }, { fill: rest }], { duration: 650, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-  }
-  const row = document.querySelector(`#sensors button[data-id="${r.sensor_id}"]`);
-  if (row && row.getAttribute("aria-current") !== "true" && nowMs - (lastFlash.get(r.sensor_id) ?? 0) > 2500) {
-    lastFlash.set(r.sensor_id, nowMs);
-    row.animate([{ backgroundColor: "#b48cff1f" }, { backgroundColor: "#b48cff00" }], { duration: 650, easing: "ease-out" });
-  }
-  const val = row?.querySelector(".val");
-  if (val) val.animate([{ transform: "translateY(-3px)", opacity: 0.4 }, { transform: "none", opacity: 1 }], { duration: 420, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-  // A packet travels along the data path, at most one every 120 ms.
-  const now = performance.now();
-  if (now - lastPacket.t > 120) {
-    lastPacket.t = now;
-    document.querySelectorAll(".pipeline .flow").forEach((svg, i) => {
-      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("r", "2.6"); dot.setAttribute("cy", "4"); dot.setAttribute("class", "packet");
-      svg.appendChild(dot);
-      dot.animate([{ cx: 2, opacity: 0 }, { cx: 10, opacity: 1, offset: 0.2 }, { cx: 46, opacity: 0 }],
-        { duration: 700, delay: i * 520, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "both" }).onfinish = () => dot.remove();
-    });
-  }
+  const val = document.querySelector(`#sensors button[data-id="${r.sensor_id}"] .val`);
+  if (val) val.animate([{ opacity: 0.45 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
 }
 
 function onReading(r) {
@@ -629,7 +641,7 @@ function connect() {
 
 async function loadAll() {
   const [sensors, active, log, rules, automations, circadian] = await Promise.all([
-    getJSON("/api/sensors"), getJSON("/api/alerts?active=true"), getJSON("/api/alerts?limit=12"), getJSON("/api/rules"),
+    getJSON("/api/sensors"), getJSON("/api/alerts?active=true"), getJSON("/api/alerts?limit=8"), getJSON("/api/rules"),
     getJSON("/api/automations"), getJSON("/api/circadian"),
   ]);
   state.automations = automations;
@@ -651,7 +663,7 @@ async function loadAll() {
 setInterval(() => {
   const cutoff = Date.now() - 60000;
   while (state.messages.length && state.messages[0] < cutoff) state.messages.shift();
-  $("#rate").textContent = `${state.messages.length} msg/min`;
+  $("#rate").textContent = `${state.messages.length} readings/min`;
   const last = Math.max(0, ...[...state.sensors.values()].map((s) => s.last_ts ?? 0));
   $("#stamp").textContent = last ? `Last reading ${time(last, true)}` : "";
 }, 1000);
@@ -668,48 +680,17 @@ setInterval(async () => {
   scheduleRender();
 }, 5000);
 
-const seg = $(".segmented"), thumb = document.createElement("span");
-thumb.className = "thumb";
-thumb.setAttribute("aria-hidden", "true");
-seg.prepend(thumb);
-let settleT;
-function moveThumb() {
-  const on = seg.querySelector('[aria-pressed="true"]');
-  seg.querySelectorAll("button").forEach((b) => b.classList.remove("settled"));
-  thumb.style.width = `${on.offsetWidth}px`;
-  thumb.style.transform = `translateX(${on.offsetLeft - 3}px)`;
-  // When the slide ends, the option paints its own fill (same look; readable without the thumb).
-  clearTimeout(settleT);
-  settleT = setTimeout(() => on.classList.add("settled"), reduced() ? 0 : 480);
-}
-requestAnimationFrame(moveThumb);
-document.fonts?.ready.then(moveThumb);
 document.querySelectorAll(".segmented button").forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll(".segmented button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    moveThumb();
     state.minutes = Number(b.dataset.min);
     loadHistory();
   };
 });
-document.querySelectorAll(".card").forEach((c) => {
-  c.addEventListener("pointermove", (e) => {
-    const r = c.getBoundingClientRect();
-    c.style.setProperty("--mx", `${e.clientX - r.left}px`);
-    c.style.setProperty("--my", `${e.clientY - r.top}px`);
-    if (reduced()) return;
-    const px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
-    c.style.setProperty("--ry", `${(px * 3).toFixed(2)}deg`);
-    c.style.setProperty("--rx", `${(-py * 3).toFixed(2)}deg`);
-  });
-  c.addEventListener("pointerleave", () => { c.style.setProperty("--rx", "0deg"); c.style.setProperty("--ry", "0deg"); });
-});
-document.querySelectorAll(".title-row, .card").forEach((el, i) => el.style.setProperty("--i", i));
-document.body.classList.add("enter");
-// Drop the entrance once it has played, so hover transforms are no longer held by the animation.
-setTimeout(() => document.body.classList.remove("enter"), 1800);
+// The bar gets a rule once content scrolls under it.
+addEventListener("scroll", () => document.querySelector(".topbar").classList.toggle("scrolled", scrollY > 4), { passive: true });
 let resizeT;
 addEventListener("resize", () => renderPlan());
-addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { renderChart(); moveThumb(); }, 120); });
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { renderChart(); renderLight(); }, 120); });
 
 loadAll().then(connect).catch(() => { setStatus("down", "Backend unreachable"); setTimeout(() => location.reload(), 5000); });

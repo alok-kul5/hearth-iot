@@ -3,43 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Hearth · Home sensors</title>
+  <meta name="color-scheme" content="light">
+  <title>Hearth · Home overview</title>
   <link rel="icon" href="/static/mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Hearth">
-      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M5 15.5 16 6l11 9.5V26a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M11.5 19.5a6.4 6.4 0 0 1 9 0M13.8 22.2a3.2 3.2 0 0 1 4.4 0" fill="none" stroke="var(--data)" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="16" cy="24.6" r="1.4" fill="var(--data)"/>
-      </svg>
-      <span class="brand-name">Hearth</span>
-    </a>
-    <span class="scope" id="scope">17 sensors · 6 rooms</span>
-
-    <div class="pipeline" aria-label="Data path from sensors to this screen">
-      <span>Sensors</span>
-      <svg class="flow" viewBox="0 0 48 8" aria-hidden="true"><path d="M2 4h44"/></svg>
-      <span>Mosquitto</span>
-      <svg class="flow" viewBox="0 0 48 8" aria-hidden="true"><path d="M2 4h44"/></svg>
-      <span>Backend</span>
-      <span class="rate" id="rate">– msg/min</span>
-    </div>
-
-    <div class="status" id="status" role="status">
-      <span class="lamp" aria-hidden="true"></span>
-      <span id="status-text">Connecting</span>
+    <div class="bar">
+      <a class="brand" href="/" aria-label="Hearth, home overview">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="7" fill="currentColor"/>
+          <path d="M8 15.4 16 8.6l8 6.8V23a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M12.6 19.2a4.8 4.8 0 0 1 6.8 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="16" cy="21.4" r="1.2" fill="#fff"/>
+        </svg>
+        <span class="brand-name">Hearth</span>
+      </a>
+      <span class="scope" id="scope">17 sensors in 6 rooms</span>
+      <div class="pipeline" aria-label="Where the readings come from">
+        <span id="via">Live over MQTT</span>
+        <span class="rate" id="rate">– readings/min</span>
+      </div>
+      <div class="status" id="status" role="status">
+        <span class="lamp" aria-hidden="true"></span>
+        <span id="status-text">Connecting</span>
+      </div>
     </div>
   </header>
 
   <main class="canvas">
+    <!-- Grid: a 1152px column of 12 x 85px with 12px gutters. 8 + 4 spans: 764 + 12 + 376 = 1152. -->
     <section class="title-row" aria-labelledby="page-title">
       <div>
         <h1 id="page-title">Home overview</h1>
@@ -49,57 +47,29 @@
     </section>
 
     <div class="grid">
-      <section class="card plan-card span-8" aria-labelledby="plan-h">
+      <section class="card span-12 air-card" aria-labelledby="air-h">
+        <header class="card-head">
+          <h2 id="air-h">Air and water</h2>
+          <span class="erv" id="erv" role="status">Ventilation off</span>
+        </header>
+        <div class="strip" id="tiles"></div>
+      </section>
+
+      <section class="card span-8" aria-labelledby="plan-h">
         <header class="card-head">
           <h2 id="plan-h">Floor plan</h2>
           <p class="card-meta">Select a room to see its history</p>
         </header>
-        <svg id="plan" class="plan" viewBox="-6 -6 612 372" role="img" aria-label="Floor plan with live sensor readings"></svg>
+        <svg id="plan" class="plan" viewBox="-6 -6 612 338" role="img" aria-label="Floor plan with live sensor readings"></svg>
       </section>
 
-      <div class="stack span-4">
-      <section class="card alerts-card" aria-labelledby="alerts-h">
+      <section class="card span-4 alerts-card" aria-labelledby="alerts-h">
         <header class="card-head">
-          <h2 id="alerts-h">Needs attention</h2>
+          <h2 id="alerts-h">Open alerts</h2>
           <span class="count" id="alert-count">0</span>
         </header>
         <ul class="alerts" id="alerts"></ul>
-      </section>
-      <section class="card rules-card" aria-labelledby="rules-h">
-        <header class="card-head">
-          <h2 id="rules-h">Alert rules</h2>
-          <p class="card-meta">From rules.yaml</p>
-        </header>
-        <ul class="rules" id="rules"></ul>
-      </section>
-      </div>
-
-      <section class="card span-8" aria-labelledby="air-h">
-        <header class="card-head">
-          <div>
-            <h2 id="air-h">Air and water</h2>
-            <p class="card-meta">Wellness sensors · select one to see its history</p>
-          </div>
-          <span class="erv" id="erv" role="status">Ventilation off</span>
-        </header>
-        <div class="tiles" id="tiles"></div>
-      </section>
-
-      <section class="card span-4 light-card" aria-labelledby="light-h">
-        <header class="card-head">
-          <div>
-            <h2 id="light-h">Circadian light</h2>
-            <p class="card-meta" id="light-sub">Living room</p>
-          </div>
-        </header>
-        <div class="light-now">
-          <span class="bulb" id="bulb" aria-hidden="true"></span>
-          <div>
-            <span class="light-k" id="light-k">–</span>
-            <span class="light-b" id="light-b"></span>
-          </div>
-        </div>
-        <svg class="daystrip" id="daystrip" role="img" aria-label="Today's schedule: colour temperature and brightness by hour"></svg>
+        <a class="card-foot" href="#log-h">See the full alert log</a>
       </section>
 
       <section class="card span-8" aria-labelledby="chart-h">
@@ -122,26 +92,53 @@
         <div class="chart" id="chart"></div>
       </section>
 
+      <section class="card span-4 light-card" aria-labelledby="light-h">
+        <header class="card-head">
+          <div>
+            <h2 id="light-h">Living room light</h2>
+            <p class="card-meta" id="light-sub">Follows the time of day</p>
+          </div>
+        </header>
+        <div class="light-now">
+          <span class="bulb" id="bulb" aria-hidden="true"></span>
+          <div>
+            <span class="light-k" id="light-k">–</span>
+            <span class="light-b" id="light-b"></span>
+          </div>
+        </div>
+        <svg class="daystrip" id="daystrip" role="img" aria-label="Today's light schedule: colour temperature and brightness for each half hour"></svg>
+        <p class="light-key">Each bar is half an hour: its colour is the light's colour temperature, its height the brightness.</p>
+      </section>
+
       <section class="card span-4 sensors-card" aria-labelledby="sensors-h">
         <header class="card-head">
-          <h2 id="sensors-h">Sensors</h2>
+          <h2 id="sensors-h">All sensors</h2>
           <p class="card-meta" id="online-count"></p>
         </header>
         <ul class="sensor-list" id="sensors"></ul>
       </section>
 
-      <section class="card span-12" aria-labelledby="log-h">
+      <section class="card span-8" aria-labelledby="log-h">
         <header class="card-head">
           <h2 id="log-h">Alert log</h2>
-          <p class="card-meta">Last 12 alerts</p>
+          <p class="card-meta">Last 8 alerts</p>
         </header>
         <table class="log">
-          <thead><tr><th scope="col">Opened</th><th scope="col">Sensor</th><th scope="col">Alert</th><th scope="col" class="num">Reading</th><th scope="col" class="num">Lasted</th></tr></thead>
+          <thead><tr><th scope="col">Opened</th><th scope="col">Sensor</th><th scope="col">What happened</th><th scope="col" class="num">Reading</th><th scope="col" class="num">Lasted</th></tr></thead>
           <tbody id="log"></tbody>
         </table>
       </section>
 
-
+      <section class="card span-12" aria-labelledby="rules-h">
+        <header class="card-head">
+          <h2 id="rules-h">Rules</h2>
+          <p class="card-meta">From rules.yaml. An alert opens once its condition has held for the time shown.</p>
+        </header>
+        <table class="rules">
+          <thead><tr><th scope="col">Rule</th><th scope="col">Sensor</th><th scope="col">Opens when</th><th scope="col">Clears when</th><th scope="col">Then</th><th scope="col">Severity</th></tr></thead>
+          <tbody id="rules"></tbody>
+        </table>
+      </section>
     </div>
   </main>
 
