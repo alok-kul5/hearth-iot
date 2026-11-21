@@ -32,6 +32,7 @@ const state = {
   rules: { rules: [], stale_after_seconds: 30 },
   selected: null,
   minutes: 15,
+  scrub: null,           // an hour the visitor is previewing on the light's day strip
   points: [],
   messages: [],          // timestamps of live readings, for the rate
   automations: {},       // device -> { state, because: [alert keys] }
@@ -272,7 +273,8 @@ function renderAlerts() {
   const now = Date.now() / 1000;
   const html = list.slice(0, 6).map((a) => {
     const s = state.sensors.get(a.sensor_id);
-    return `<li class="alert">
+    const fresh = !(renderAlerts.seen ??= new Set()).has(a.key);
+    return `<li class="alert ${fresh && renderAlerts.ready ? "arrive" : ""}">
       <span class="who">${esc(s ? sensorName(s) : a.sensor_id)}</span><span class="when">for ${dur(now - a.opened_at)}</span>
       <span class="what">${esc(alertText(a))}</span>
       <span class="pill ${a.severity}">${a.severity === "critical" ? "Critical" : "Warning"}</span>
@@ -286,6 +288,8 @@ function renderAlerts() {
       <span class="what">${esc(alertText(a, false))}, lasted ${dur(a.resolved_at - a.opened_at)}</span></li>`;
   }).join("") : "";
   patch($("#alerts"), html + recent);
+  list.forEach((a) => renderAlerts.seen.add(a.key));
+  renderAlerts.ready = true;
   fitCleared();
 }
 
@@ -383,7 +387,10 @@ function renderWellness() {
     const bar = w.max && s.last_value != null
       ? `<span class="t-bar"><span class="t-fill ${BAND[b]}" style="width: ${Math.min(100, (s.last_value / w.max) * 100).toFixed(1)}%"></span>${thr != null ? `<span class="t-limit" style="left: ${((thr / w.max) * 100).toFixed(1)}%"></span>` : ""}</span>`
       : `<span class="t-bar"></span>`;
-    return `<button type="button" class="tile" data-id="${w.id}" aria-current="${w.id === state.selected}">
+    const was = (renderWellness.bands ??= {})[w.id];
+    renderWellness.bands[w.id] = b;
+    const jump = was != null && b > was ? "jump" : "";
+    return `<button type="button" class="tile ${jump}" data-id="${w.id}" aria-current="${w.id === state.selected}">
       <span class="t-label">${w.label}</span>
       <span class="t-value ${off ? "offline" : b === 2 ? "poor" : ""}" ${off ? "" : numAttr(s)}>${off ? "Offline" : v.text}${!off && v.unit ? `<span class="unit">${v.unit}</span>` : ""}</span>
       <span class="t-note ${off ? "" : BAND[b]}">${off ? `Last seen ${ago(s.last_ts)}` : note}</span>
@@ -394,7 +401,12 @@ function renderWellness() {
   $("#tiles").querySelectorAll(".tile[data-id]").forEach((t) => (t.onclick = () => select(t.dataset.id)));
   const vt = ventilationText();
   const erv = $("#erv");
-  erv.textContent = vt.text;
+  const fan = `<svg class="fan" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2"/><g class="blades"><ellipse cx="8" cy="4.6" rx="1.8" ry="3.2"/><ellipse cx="8" cy="4.6" rx="1.8" ry="3.2" transform="rotate(120 8 8)"/><ellipse cx="8" cy="4.6" rx="1.8" ry="3.2" transform="rotate(240 8 8)"/></g></svg>`;
+  if (erv.dataset.text !== vt.text) {
+    erv.innerHTML = `${fan}<span>${esc(vt.text)}</span>`;
+    erv.dataset.text = vt.text;
+    if (!reduced()) erv.animate([{ transform: "translateY(4px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 400, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  }
   erv.classList.toggle("on", vt.on);
 }
 
@@ -411,34 +423,72 @@ function kelvinRGB(k) {
 }
 const phase = (h) => (h < 5.5 ? "Night light" : h < 8 ? "Sunrise" : h < 12 ? "Morning" : h < 15 ? "Midday" : h < 18 ? "Afternoon" : h < 20 ? "Evening" : h < 23 ? "Winding down" : "Night light");
 
+const hhmm = (h) => `${String(Math.floor(h) % 24).padStart(2, "0")}:${String(Math.round((h % 1) * 60) % 60).padStart(2, "0")}`;
+function scheduleAt(hour) {
+  const sch = state.circadian?.schedule ?? [];
+  const i = Math.min(sch.length - 1, Math.round(hour * 2));
+  return sch[i];
+}
 function renderLight() {
   const k = state.sensors.get("light-living-kelvin"), b = state.sensors.get("light-living-level");
   const c = state.circadian;
-  const kelvin = k?.last_value ?? c?.target.kelvin, level = b?.last_value ?? c?.target.brightness;
+  const scrub = state.scrub != null ? scheduleAt(state.scrub) : null;
+  const kelvin = scrub?.kelvin ?? k?.last_value ?? c?.target.kelvin, level = scrub?.brightness ?? b?.last_value ?? c?.target.brightness;
   if (kelvin == null) return;
   const rgb = kelvinRGB(kelvin);
   const bulb = $("#bulb");
   bulb.style.setProperty("--bulb", rgb);
+  bulb.style.setProperty("--level", (level / 100).toFixed(2));
   $("#light-k").innerHTML = `${Math.round(kelvin)}<span class="unit">K</span>`;
-  $("#light-b").textContent = `${Math.round(level)} % brightness`;
+  $("#light-b").textContent = scrub ? `${Math.round(level)} % brightness at ${hhmm(state.scrub)}` : `${Math.round(level)} % brightness now`;
+  window.livingPlan?.preview(scrub ? { kelvin, brightness: level } : null);
   if (!c) return;
-  $("#light-sub").textContent = `${phase(c.hour)}, ${c.timezone.replace("_", " ")} time`;
+  $("#light-sub").textContent = scrub ? `${phase(state.scrub)}, preview` : `${phase(c.hour)}, ${c.timezone.replace("_", " ")} time`;
   const svg = $("#daystrip");
+  svg.setAttribute("aria-valuenow", String(state.scrub ?? c.hour));
+  svg.setAttribute("aria-valuetext", `${hhmm(state.scrub ?? c.hour)}, ${Math.round(kelvin)} kelvin, ${Math.round(level)} percent`);
   const W = svg.clientWidth || 300, H = Math.max(112, svg.clientHeight || 112), T = 18, B = 20, cols = c.schedule.slice(0, -1);
   const cw = W / cols.length, Y = (pct) => T + (1 - pct / 100) * (H - T - B);
+  const at = state.scrub != null ? Math.min(cols.length - 1, Math.floor(state.scrub * 2)) : -1;
   const bars = cols.map((p, i) => {
     const y = Y(Math.max(2, p.brightness));
-    return `<rect x="${(i * cw + 0.5).toFixed(1)}" y="${y.toFixed(1)}" width="${(cw - 1).toFixed(1)}" height="${(H - B - y).toFixed(1)}" fill="${kelvinRGB(p.kelvin)}"><title>${String(Math.floor(p.hour)).padStart(2, "0")}:${p.hour % 1 ? "30" : "00"} · ${p.kelvin} K · ${p.brightness} %</title></rect>`;
+    return `<rect class="${i === at ? "on" : ""}" x="${(i * cw + 0.5).toFixed(1)}" y="${y.toFixed(1)}" width="${(cw - 1).toFixed(1)}" height="${(H - B - y).toFixed(1)}" fill="${kelvinRGB(p.kelvin)}"/>`;
   }).join("");
   const nx = (c.hour / 24) * W;
   const labels = [0, 6, 12, 18, 24].map((h) => `<text class="tick" x="${(h / 24) * W}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h % 24).padStart(2, "0")}:00</text>`).join("");
-  const anchor = nx > W - 40 ? "end" : nx < 40 ? "start" : "middle";
+  const anchor = (x) => (x > W - 40 ? "end" : x < 40 ? "start" : "middle");
+  let marker = `<line class="now-line" x1="${nx}" x2="${nx}" y1="${T - 2}" y2="${H - B}"/>
+    <text class="now-label" x="${nx}" y="${T - 6}" text-anchor="${anchor(nx)}">Now</text>`;
+  if (state.scrub != null) {
+    const sx = (state.scrub / 24) * W;
+    marker = `<line class="now-line ghost" x1="${nx}" x2="${nx}" y1="${T - 2}" y2="${H - B}"/>
+      <line class="scrub-line" x1="${sx}" x2="${sx}" y1="${T - 2}" y2="${H - B}"/>
+      <text class="now-label" x="${sx}" y="${T - 6}" text-anchor="${anchor(sx)}">${hhmm(state.scrub)}</text>`;
+  }
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.innerHTML = `${bars}<line class="base" x1="0" x2="${W}" y1="${H - B + 0.5}" y2="${H - B + 0.5}"/>
-    <line class="now-line" x1="${nx}" x2="${nx}" y1="${T - 2}" y2="${H - B}"/>
-    <text class="now-label" x="${nx}" y="${T - 6}" text-anchor="${anchor}">Now</text>
-    ${labels}`;
+  svg.innerHTML = `${bars}<line class="base" x1="0" x2="${W}" y1="${H - B + 0.5}" y2="${H - B + 0.5}"/>${marker}${labels}`;
 }
+
+// Scrub the day: drag (or use the arrow keys) to preview the light at any hour; let go to return to now.
+(() => {
+  const svg = $("#daystrip");
+  const hourAt = (e) => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(23.99, ((e.clientX - r.left) / r.width) * 24)); };
+  let dragging = false;
+  const set = (h) => { state.scrub = h; renderLight(); };
+  svg.addEventListener("pointerdown", (e) => { dragging = true; svg.setPointerCapture(e.pointerId); set(hourAt(e)); });
+  svg.addEventListener("pointermove", (e) => { if (dragging || e.pointerType === "mouse") set(hourAt(e)); });
+  const end = () => { dragging = false; set(null); };
+  svg.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") end(); else dragging = false; });
+  svg.addEventListener("pointerleave", end);
+  svg.addEventListener("keydown", (e) => {
+    const now = state.circadian?.hour ?? 12;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      set(((state.scrub ?? now) + (e.key === "ArrowRight" ? 0.5 : -0.5) + 24) % 24);
+    } else if (e.key === "Escape") set(null);
+  });
+  svg.addEventListener("blur", () => set(null));
+})();
 
 /* ── History chart (SVG, drawn from the points) ────────── */
 function ticks(min, max, count = 4) {
@@ -683,17 +733,61 @@ setInterval(async () => {
   scheduleRender();
 }, 5000);
 
+const seg = $(".segmented"), thumb = document.createElement("span");
+thumb.className = "thumb";
+thumb.setAttribute("aria-hidden", "true");
+seg.prepend(thumb);
+function moveThumb() {
+  const on = seg.querySelector('[aria-pressed="true"]');
+  thumb.style.width = `${on.offsetWidth}px`;
+  thumb.style.transform = `translateX(${on.offsetLeft - 2}px)`;
+}
+requestAnimationFrame(moveThumb);
+document.fonts?.ready.then(moveThumb);
 document.querySelectorAll(".segmented button").forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll(".segmented button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    moveThumb();
     state.minutes = Number(b.dataset.min);
     loadHistory();
   };
 });
+
+let toastT;
+function toast(text) {
+  const t = $("#toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove("show"), 7000);
+}
+const TRY_TEXT = {
+  cooking: "Dinner is on. Smoke rises in the kitchen, and once PM2.5 stays over 35 µg/m³ for 30 seconds the ventilation switches on.",
+  guests: "Four friends arrived. CO₂ in the living room starts to climb; above 1000 ppm for 5 minutes, the ventilation runs.",
+  spray: "Cleaner sprayed in the living room. VOCs jump at once, and after a minute over 500 ppb the ventilation comes on.",
+  leak: "Water under the bathroom sink. A leak is a critical alert, so it opens straight away.",
+};
+document.querySelectorAll("#try button[data-event]").forEach((b) => {
+  b.onclick = async () => {
+    b.classList.add("busy");
+    const r = await fetch(`/api/simulate/${b.dataset.event}`, { method: "POST" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    b.classList.remove("busy");
+    if (!r) return toast("Couldn't reach the backend, so nothing was sent.");
+    toast(TRY_TEXT[b.dataset.event] + (r.sent === false ? " The simulator isn't connected right now, so nothing will change." : ""));
+    if (b.dataset.watch && state.sensors.has(b.dataset.watch)) select(b.dataset.watch);
+    b.classList.add("sent");
+    setTimeout(() => b.classList.remove("sent"), 1200);
+  };
+});
+
+// On load the title and the cards rise in, one after another.
+document.querySelectorAll(".title-row, .try, .card").forEach((el, i) => el.style.setProperty("--i", i));
+document.body.classList.add("enter");
+setTimeout(() => document.body.classList.remove("enter"), 1600);
 // The bar gets a rule once content scrolls under it.
 addEventListener("scroll", () => document.querySelector(".topbar").classList.toggle("scrolled", scrollY > 4), { passive: true });
 let resizeT;
 addEventListener("resize", () => renderPlan());
-addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { renderChart(); renderLight(); }, 120); });
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { renderChart(); renderLight(); moveThumb(); }, 120); });
 
 loadAll().then(connect).catch(() => { setStatus("down", "Backend unreachable"); setTimeout(() => location.reload(), 5000); });

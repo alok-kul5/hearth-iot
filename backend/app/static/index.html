@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
+  <script src="/static/living.js" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -46,6 +47,16 @@
       <p class="stamp" id="stamp"></p>
     </section>
 
+    <section class="try" aria-labelledby="try-h">
+      <h2 id="try-h" class="try-h">Make something happen</h2>
+      <div class="try-buttons" id="try">
+        <button type="button" data-event="cooking" data-watch="pm25-kitchen"><span class="try-name">Cook dinner</span><span class="try-what">Smoke in the kitchen</span></button>
+        <button type="button" data-event="guests" data-watch="co2-living"><span class="try-name">Have friends over</span><span class="try-what">CO₂ climbs</span></button>
+        <button type="button" data-event="spray" data-watch="voc-living"><span class="try-name">Spray cleaner</span><span class="try-what">VOCs jump</span></button>
+        <button type="button" data-event="leak" data-watch="leak-bathroom"><span class="try-name">Spill water</span><span class="try-what">Under the sink</span></button>
+      </div>
+    </section>
+
     <div class="grid">
       <section class="card span-12 air-card" aria-labelledby="air-h">
         <header class="card-head">
@@ -60,7 +71,9 @@
           <h2 id="plan-h">Floor plan</h2>
           <p class="card-meta">Select a room to see its history</p>
         </header>
-        <svg id="plan" class="plan" viewBox="-6 -6 612 338" role="img" aria-label="Floor plan with live sensor readings"></svg>
+        <div class="plan-wrap">
+          <svg id="plan" class="plan" viewBox="-6 -6 612 338" role="img" aria-label="Floor plan with live sensor readings"></svg>
+        </div>
       </section>
 
       <section class="card span-4 alerts-card" aria-labelledby="alerts-h">
@@ -106,8 +119,8 @@
             <span class="light-b" id="light-b"></span>
           </div>
         </div>
-        <svg class="daystrip" id="daystrip" role="img" aria-label="Today's light schedule: colour temperature and brightness for each half hour"></svg>
-        <p class="light-key">Each bar is half an hour: its colour is the light's colour temperature, its height the brightness.</p>
+        <svg class="daystrip" id="daystrip" tabindex="0" role="slider" aria-label="Preview the light at another time of day" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></svg>
+        <p class="light-key">Drag across the day to see the light at any hour. Each bar is half an hour: its colour is the colour temperature, its height the brightness.</p>
       </section>
 
       <section class="card span-4 sensors-card" aria-labelledby="sensors-h">
@@ -143,5 +156,6 @@
   </main>
 
   <div class="tooltip" id="tooltip" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

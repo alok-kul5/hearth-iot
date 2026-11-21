@@ -301,3 +301,83 @@ h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
 @media (min-width: 1081px) {
   .alerts-card .alerts { flex: 0 1 auto; margin-bottom: 12px; }
 }
+
+/* ── Make something happen ─────────────────────────────── */
+.try { display: flex; align-items: center; gap: 16px; margin: -4px 0 16px; flex-wrap: wrap; }
+.try-h { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); }
+.try-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.try-buttons button {
+  position: relative; overflow: hidden; display: grid; text-align: left; gap: 0;
+  padding: 7px 14px 8px; border: 1px solid var(--control); border-radius: var(--radius-control);
+  background: var(--surface); cursor: pointer; min-height: 44px;
+  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease), background 0.2s var(--ease);
+}
+.try-buttons button:hover { border-color: var(--text); transform: translateY(-1px); }
+.try-buttons button:active { transform: scale(0.97); }
+.try-name { font-size: 13.5px; font-weight: 500; line-height: 18px; }
+.try-what { font-size: 12px; line-height: 16px; color: var(--muted); }
+.try-buttons .primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.try-buttons .primary .try-what { color: #c9c7c3; }
+.try-buttons .primary:hover { background: #2a2a2a; }
+/* A sent event fills the button from the left, like a progress bar finishing. */
+.try-buttons button::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2px; background: var(--data); transform: scaleX(0); transform-origin: left; }
+.try-buttons button.busy::after { transform: scaleX(0.6); transition: transform 0.6s var(--ease); }
+.try-buttons button.sent::after { transform: scaleX(1); transition: transform 0.3s var(--ease); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 20; max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 16px; border-radius: 8px; background: var(--primary); color: #fff; font-size: 13.5px; line-height: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+  transition: transform 0.4s var(--ease), opacity 0.3s var(--ease);
+}
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+/* ── The living plan ───────────────────────────────────── */
+.plan-wrap { position: relative; }
+.living { position: absolute; inset: 0; pointer-events: none; }
+
+/* ── Feedback and arrivals ─────────────────────────────── */
+.erv { gap: 6px; }
+.erv::before { display: none; }
+.erv .fan { width: 15px; height: 15px; color: var(--control); flex: none; }
+.erv .fan .blades { fill: currentColor; transform-origin: 8px 8px; }
+.erv.on .fan { color: var(--positive); }
+.erv.on .fan .blades { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.segmented { position: relative; }
+.segmented .thumb { position: absolute; top: 2px; left: 2px; height: 28px; border-radius: 5px; background: var(--surface); box-shadow: 0 0 0 1px var(--border); transition: transform 0.4s cubic-bezier(0.34, 1.3, 0.64, 1), width 0.4s var(--ease); }
+.segmented button { position: relative; z-index: 1; }
+.segmented button[aria-pressed="true"] { background: transparent; box-shadow: none; }
+
+.alert.arrive { animation: arrive 0.7s var(--ease) both; }
+@keyframes arrive { from { opacity: 0; transform: translateX(18px); background: var(--pill-negative-bg); } 60% { background: var(--pill-negative-bg); } to { opacity: 1; transform: none; background: transparent; } }
+.tile.jump .t-value { animation: jump 0.9s var(--ease); }
+@keyframes jump { 0% { transform: scale(1); } 25% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.card { transition: border-color 0.25s var(--ease); }
+.card:hover { border-color: #d9d6d1; }
+.room { transition: transform 0.3s var(--ease); transform-box: fill-box; transform-origin: center; }
+.room:hover { transform: scale(1.01); }
+.room:active { transform: scale(0.99); }
+
+.bulb { --level: 0.5; box-shadow: 0 0 calc(4px + var(--level) * 28px) calc(var(--level) * 6px) color-mix(in srgb, var(--bulb) 55%, transparent), inset 0 0 0 1px rgba(0, 0, 0, 0.08); transition: background 0.5s var(--ease), box-shadow 0.5s var(--ease); }
+.daystrip { cursor: ew-resize; touch-action: pan-y; }
+.daystrip rect { transition: opacity 0.2s var(--ease); }
+.daystrip rect.on { stroke: var(--text); stroke-width: 1.5; }
+.daystrip .scrub-line { stroke: var(--text); stroke-width: 1.5; }
+.daystrip .now-line.ghost { stroke: var(--faint); stroke-dasharray: 2 3; }
+
+/* On load: the title, the try bar and the cards rise in one after another. */
+body.enter .title-row, body.enter .try, body.enter .card { animation: rise 0.7s var(--ease) both; animation-delay: calc(var(--i, 0) * 60ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 640px) {
+  .try { gap: 8px; }
+  .try-buttons { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .toast { bottom: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.enter .title-row, body.enter .try, body.enter .card { animation: none; }
+  .room:hover, .try-buttons button:hover { transform: none; }
+}
