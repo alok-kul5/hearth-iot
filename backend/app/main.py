@@ -8,14 +8,18 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketState
 
+from . import circadian
+from .automations import Automations
 from .config import APP_DIR, Settings
 from .config import settings as default_settings
+from .ha_discovery import COMMAND_PREFIX, Discovery, discovery_message
 from .ingest import Ingestor
 from .mqtt_client import MqttSubscriber
 from .rules import AlertEngine
@@ -51,16 +55,49 @@ class Hub:
 def create_app(cfg: Settings = default_settings) -> FastAPI:
     storage = Storage(cfg.db_path)
     engine = AlertEngine.from_yaml(cfg.rules_path)
-    engine.restore(storage.open_alert_keys())
+    open_keys = storage.open_alert_keys()
+    engine.restore(open_keys)
     hub = Hub()
-    ingestor = Ingestor(storage, engine, hub.publish)
-    subscriber = MqttSubscriber(cfg.mqtt_host, cfg.mqtt_port, cfg.mqtt_topic, ingestor.handle)
+    tz = ZoneInfo(cfg.timezone)
+    light = circadian.CircadianLight(tz)
+
+    # Outgoing MQTT goes through `publish`; it is a no-op when MQTT is off (tests).
+    def publish(topic: str, payload: str, retain: bool = False) -> None:
+        if cfg.enable_mqtt:
+            subscriber.publish(topic, payload, retain)
+
+    def command(device: str, payload: str) -> None:
+        publish(f"{COMMAND_PREFIX}/{device}", payload, True)
+
+    automations = Automations(engine.rules, command)
+    automations.restore(open_keys)
+    discovery = Discovery(publish, cfg.ha_prefix)
+    ingestor = Ingestor(storage, engine, hub.publish, automations, discovery.on_reading if cfg.ha_discovery else None)
+
+    def on_message(topic: str, payload: bytes) -> None:
+        if topic == discovery.status_topic:
+            if payload.strip().lower() == b"online":  # Home Assistant restarted: announce everything again
+                log.info("Home Assistant online, re-sent %d discovery configs", discovery.announce_all(storage.sensors()))
+            return
+        ingestor.handle(topic, payload)
+
+    def on_connect() -> None:
+        automations.sync()
+        if cfg.ha_discovery:
+            discovery.announce_all(storage.sensors())
+        if cfg.circadian:
+            command(light.device, light.tick(time.time(), force=True))
+
+    topics = [cfg.mqtt_topic] + ([discovery.status_topic] if cfg.ha_discovery else [])
+    subscriber = MqttSubscriber(cfg.mqtt_host, cfg.mqtt_port, topics, on_message, on_connect)
 
     async def housekeeping() -> None:
         last_prune = 0.0
         while True:
             now = time.time()
             ingestor.check_offline(now)
+            if cfg.circadian and (cmd := light.tick(now)):
+                command(light.device, cmd)
             if now - last_prune > 600:
                 removed = storage.prune(now - cfg.retention_hours * 3600)
                 if removed:
@@ -85,6 +122,8 @@ def create_app(cfg: Settings = default_settings) -> FastAPI:
     app = FastAPI(title="Smart Home Sensor Dashboard", version="1.0.0", lifespan=lifespan)
     app.state.ingestor = ingestor
     app.state.storage = storage
+    app.state.on_message = on_message
+    app.state.discovery = discovery
 
     @app.get("/api/health")
     def health():
@@ -117,6 +156,28 @@ def create_app(cfg: Settings = default_settings) -> FastAPI:
             "stale_after_seconds": engine.stale_after,
             "rules": [r.__dict__ for r in engine.rules],
         }
+
+    @app.get("/api/automations")
+    def automation_state():
+        """Devices switched by rules, whether each is on, and which open alerts are keeping it on."""
+        return automations.state()
+
+    @app.get("/api/circadian")
+    def circadian_schedule():
+        now = time.time()
+        kelvin, brightness = light.target(now)
+        return {
+            "timezone": cfg.timezone,
+            "hour": round(circadian.local_hour(now, tz), 3),
+            "target": {"kelvin": kelvin, "brightness": brightness},
+            "schedule": circadian.schedule(30),
+        }
+
+    @app.get("/api/homeassistant/discovery")
+    def ha_discovery():
+        """The MQTT Discovery configs Hearth publishes for Home Assistant, one per known sensor."""
+        msgs = [discovery_message(s, cfg.ha_prefix) for s in storage.sensors()]
+        return [{"topic": t, "config": c} for t, c in filter(None, msgs)]
 
     @app.websocket("/ws")
     async def live(ws: WebSocket):

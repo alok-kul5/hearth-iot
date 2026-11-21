@@ -150,7 +150,7 @@ def test_cooking_happens_at_meal_times():
     h = Household()
     dinner = NOON + 7.5 * 3600  # 19:30 UTC
     started = 0
-    for i in range(2000):
+    for _ in range(2000):
         h.step(dinner, rng)
         if h._cooking_left:
             started += 1

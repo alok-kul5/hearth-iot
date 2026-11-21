@@ -107,3 +107,57 @@ def test_rules_endpoint(client):
     body = client.get("/api/rules").json()
     assert body["stale_after_seconds"] == 30
     assert any(r["name"] == "door_left_open" for r in body["rules"])
+
+
+def test_wellness_readings_are_accepted(client):
+    for sid, room, type_, value in [
+        ("co2-bedroom", "bedroom", "co2", 640), ("pm25-kitchen", "kitchen", "pm25", 8.2),
+        ("voc-living", "living_room", "voc", 140), ("tds-kitchen", "kitchen", "tds", 85),
+        ("leak-bathroom", "bathroom", "leak", 0), ("erv-main", "hallway", "ventilation", 0),
+        ("light-living-kelvin", "living_room", "color_temp", 4000), ("light-living-level", "living_room", "brightness", 80),
+    ]:
+        client.ingest(*msg(sensor_id=sid, room=room, type_=type_, value=value))
+    assert len(client.get("/api/sensors").json()) == 8
+    assert client.get("/api/health").json()["messages_rejected"] == 0
+
+
+def test_leak_raises_a_critical_alert(client):
+    client.ingest(*msg(sensor_id="leak-bathroom", room="bathroom", type_="leak", value=1))
+    active = client.get("/api/alerts?active=true").json()
+    assert [(a["rule"], a["severity"]) for a in active] == [("water_leak", "critical")]
+
+
+def test_high_co2_switches_ventilation_on(client):
+    assert client.get("/api/automations").json() == {"erv-main": {"state": "OFF", "because": []}}
+    now = time.time()
+    for i in range(7):
+        client.ingest(*msg(sensor_id="co2-bedroom", room="bedroom", type_="co2", value=1180, ts=now - 360 + i * 60))
+    state = client.get("/api/automations").json()["erv-main"]
+    assert state == {"state": "ON", "because": ["co2-bedroom:co2_high"]}
+
+
+def test_circadian_endpoint(client):
+    body = client.get("/api/circadian").json()
+    assert body["timezone"] == "UTC"
+    assert 0 <= body["hour"] < 24
+    assert len(body["schedule"]) == 49
+    assert 1800 <= body["target"]["kelvin"] <= 6500
+
+
+def test_home_assistant_discovery_endpoint_lists_known_sensors(client):
+    client.ingest(*msg())
+    client.ingest(*msg(sensor_id="co2-bedroom", room="bedroom", type_="co2", value=600))
+    body = client.get("/api/homeassistant/discovery").json()
+    topics = sorted(m["topic"] for m in body)
+    assert topics == ["homeassistant/sensor/hearth/co2-bedroom/config", "homeassistant/sensor/hearth/temp-kitchen/config"]
+
+
+def test_home_assistant_birth_message_resends_discovery(client, monkeypatch):
+    sent = []
+    disc = client.app.state.discovery
+    monkeypatch.setattr(disc, "publish", lambda topic, payload, retain: sent.append(topic))
+    client.ingest(*msg())
+    assert len(sent) == 1  # first reading announces the sensor
+    client.app.state.on_message("homeassistant/status", b"online")
+    assert len(sent) == 2
+    assert client.get("/api/health").json()["messages_rejected"] == 0  # not treated as a reading

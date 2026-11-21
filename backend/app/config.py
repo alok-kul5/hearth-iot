@@ -18,6 +18,10 @@ class Settings:
     rules_path: str = os.getenv("RULES_PATH", str(APP_DIR / "rules.yaml"))
     retention_hours: float = float(os.getenv("RETENTION_HOURS", "24"))
     enable_mqtt: bool = os.getenv("ENABLE_MQTT", "1") == "1"
+    timezone: str = os.getenv("TIMEZONE", "UTC")
+    ha_discovery: bool = os.getenv("HA_DISCOVERY", "1") == "1"
+    ha_prefix: str = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
+    circadian: bool = os.getenv("CIRCADIAN", "1") == "1"
 
 
 settings = Settings()
