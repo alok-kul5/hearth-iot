@@ -52,7 +52,7 @@ class Household:
         if room == "bedroom":
             return 2 if asleep else 0
         if room == "living_room":
-            return 0 if asleep else (3 if hour >= 18 else 1) + guests
+            return (0 if asleep else 3 if hour >= 18 else 1) + guests  # guests count at any hour
         if room == "kitchen":
             return 1 if self.cooking else 0
         return 0

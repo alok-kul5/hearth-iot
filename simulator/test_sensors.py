@@ -229,6 +229,7 @@ def test_visitor_events_from_the_dashboard():
     rng = random.Random(1)
     assert h.apply_command("sim", b"cooking") and h.cooking
     assert h.apply_command("sim", b"guests") and h.occupants("living_room", 12) == 5
+    assert h.occupants("living_room", 2) == 4  # friends who stay late still breathe
     voc = VOCSensor("v", "living_room", "voc", "ppb", household=h, fault_chance=0)
     before = voc.read(NOON, rng)
     assert h.apply_command("sim", b"spray")

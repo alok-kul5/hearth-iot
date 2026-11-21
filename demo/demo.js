@@ -10,6 +10,11 @@
 (() => {
   "use strict";
 
+  // The demo's clock. "Skip ahead" moves it forward, so the whole page (charts, "x ago", alert ages) agrees.
+  let offset = 0;
+  const realNow = Date.now.bind(Date);
+  Date.now = () => realNow() + offset * 1000;
+
   /* ── Random helpers ─────────────────────────────────── */
   const rand = Math.random;
   const gauss = (sd) => sd * Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
@@ -26,13 +31,13 @@
 
   /* ── Household: people, cooking, ventilation, the light ─ */
   const home = {
-    ventilation: false, lightKelvin: 2700, lightLevel: 0, cookingLeft: 0, guestsLeft: 0,
+    ventilation: false, lightKelvin: 2700, lightLevel: 0, cookingLeft: 0, guestsLeft: 0, pending: new Set(),
     get cooking() { return this.cookingLeft > 0; },
     occupants(room, hour) {
       const asleep = hour >= 23 || hour < 7;
       const guests = this.guestsLeft > 0 ? 4 : 0;
       if (room === "bedroom") return asleep ? 2 : 0;
-      if (room === "living_room") return asleep ? 0 : (hour >= 18 ? 3 : 1) + guests;
+      if (room === "living_room") return (asleep ? 0 : hour >= 18 ? 3 : 1) + guests;  // guests count at any hour
       if (room === "kitchen") return this.cooking ? 1 : 0;
       return 0;
     },
@@ -45,6 +50,13 @@
       }
       if (this.guestsLeft > 0) this.guestsLeft--;
       else if (hour >= 9 && hour < 23 && rand() < 0.0008 * SCALE) this.guestsLeft = randint(150, 400);
+    },
+    event(name) {  // what the dashboard's "Try it" buttons do (simulator/sensors.py, device "sim")
+      if (name === "cooking") this.cookingLeft = 150;
+      else if (name === "guests") this.guestsLeft = 300;
+      else if (name === "spray" || name === "leak") this.pending.add(name);
+      else return false;
+      return true;
     },
     command(device, payload) {
       if (device === "erv-main") this.ventilation = payload === "ON";
@@ -117,7 +129,7 @@
     return (t) => {
       const target = base + 35 * home.occupants(room, localHour(t)) + (home.cooking ? 180 : 0);
       level += (target - level) * (0.01 + (home.ventilation ? 0.03 : 0)) + gauss(4);
-      if (rand() < fault) level += uniform(500, 900);
+      if (rand() < fault || home.pending.delete("spray")) level += uniform(500, 900);
       level = Math.max(20, level);
       return Math.round(level);
     };
@@ -135,6 +147,7 @@
   function leak(fault = 0.0005) {
     let wet = 0;
     return () => {
+      if (home.pending.delete("leak")) wet = Math.max(wet, 45);
       if (wet === 0 && rand() < fault) wet = randint(30, 120);
       if (wet > 0) { wet--; return 1; }
       return 0;
@@ -279,7 +292,10 @@
 
   /* ── Fake backend: /api/* and /ws ───────────────────── */
   const NOT_FOUND = Symbol("404");
-  function route(path, q) {
+  const SIM = { cooking: "Dinner is on the hob", guests: "Four friends came over", spray: "Someone used a cleaning spray", leak: "Water is dripping under the bathroom sink" };
+  function route(path, q, method = "GET") {
+    const sim = path.match(/^\/api\/simulate\/(\w+)$/);
+    if (sim) return method === "POST" && SIM[sim[1]] && home.event(sim[1]) ? { event: sim[1], what: SIM[sim[1]], sent: true } : NOT_FOUND;
     const now = Date.now() / 1000;
     if (path === "/api/health") return { status: "ok", mqtt_connected: false, demo: true, messages_received: received, messages_rejected: 0, readings_stored: [...history.values()].reduce((n, h) => n + h.length, 0) };
     if (path === "/api/sensors") return [...latest.values()].sort((a, b) => a.room.localeCompare(b.room) || a.sensor_id.localeCompare(b.sensor_id)).map((s) => ({ ...s, online: now - s.last_ts <= STALE }));
@@ -312,15 +328,35 @@
       if (t === start + 300) home.cookingLeft = 150;
       tick(t, false);
     }
-    setInterval(() => tick(Date.now() / 1000, true), TICK * 1000);
+    setInterval(() => { if (!skipping) tick(Date.now() / 1000, true); }, TICK * 1000);
   });
+
+  // Skip ahead: play the next minutes out as a time-lapse, three ticks at a time, through the same live feed.
+  let skipping = false;
+  function skipAhead(minutes) {
+    if (skipping) return Promise.resolve();
+    skipping = true;
+    let left = (minutes * 60) / TICK;
+    return new Promise((done) => {
+      const run = () => {
+        for (let i = 0; i < 3 && left > 0; i++, left--) { offset += TICK; tick(Date.now() / 1000, true); }
+        if (left > 0) setTimeout(run, 30);  // about three seconds for ten minutes  // a timer, not rAF, so a background tab still finishes
+        else {
+          skipping = false;
+          if (typeof state !== "undefined") state.messages.length = 0;  // the rate is for real time, not the time-lapse
+          done();
+        }
+      };
+      setTimeout(run, 0);
+    });
+  }
 
   window.fetch = async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input.url, location.href);
     const at = url.pathname.indexOf("/api/");
     if (at < 0) return realFetch(input, init);
     await ready;
-    const body = route(url.pathname.slice(at), url.searchParams);
+    const body = route(url.pathname.slice(at), url.searchParams, (init?.method ?? "GET").toUpperCase());
     if (body === NOT_FOUND) return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404, headers: { "content-type": "application/json" } });
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   };
@@ -346,6 +382,25 @@
     note.className = "demo-note";
     note.innerHTML = `<strong>Live demo, simulated in your browser.</strong> The real version runs on MQTT, Mosquitto and FastAPI: <a href="https://github.com/alok-kul5/hearth-iot">see the code on GitHub</a>.`;
     document.querySelector(".title-row > div")?.append(note);
+    const tryRow = document.getElementById("try");
+    if (tryRow) {
+      const skip = document.createElement("button");
+      skip.type = "button";
+      skip.className = "primary";
+      skip.innerHTML = `<span class="try-name">Skip ahead 10 min</span><span class="try-what">Watch it play out</span>`;
+      skip.onclick = async () => {
+        skip.disabled = true;
+        skip.classList.add("busy");
+        await ready;
+        await skipAhead(10);
+        skip.classList.remove("busy");
+        skip.classList.add("sent");
+        setTimeout(() => skip.classList.remove("sent"), 1200);
+        skip.disabled = false;
+        if (typeof toast === "function") toast("Ten minutes later. The charts, alerts and ventilation have caught up with what happened.");
+      };
+      tryRow.append(skip);
+    }
     const via = document.getElementById("via");
     if (via) via.textContent = "Simulated in this browser";
     document.title = "Hearth · Live demo";
