@@ -80,7 +80,7 @@ flowchart LR
 | `backend/app/circadian.py` | The circadian lighting schedule, and when to send the light a new setpoint. |
 | `backend/app/ha_discovery.py` | Builds the Home Assistant MQTT Discovery config for each sensor. |
 | `backend/app/storage.py` | SQLite in WAL mode: raw readings, latest state per sensor, and the alert history. Long time ranges are averaged into about 300 points for the chart, and old readings are pruned after 24 hours. |
-| `backend/app/static/` | Dashboard written in plain JavaScript, with Chart.js for the history chart. It loads state over REST, then follows the live feed and reconnects on its own if the connection drops. |
+| `backend/app/static/` | Dashboard in plain JavaScript with hand-drawn SVG charts and no framework. Ink on a warm stone ground, with colour only on readings that are out of range and on the light itself. It loads state over REST, then follows the live feed and reconnects on its own if the connection drops. |
 
 ### Sensors
 
