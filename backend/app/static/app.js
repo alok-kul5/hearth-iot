@@ -260,17 +260,25 @@ function headline(a) {
 }
 const severityOrder = (a, b) => (b.severity === "critical") - (a.severity === "critical") || b.opened_at - a.opened_at;
 
-// Words sit in masks so a new answer can roll up into place; the old one rolls out first.
+// Words sit in masks so a new answer can roll up into place; the old one rolls out first. The sentence
+// and the evidence line under it always change together, so they never disagree on screen.
 const wordsHTML = (t) => esc(t).split(" ").map((w) => `<span class="w"><span>${w}</span></span>`).join(" ");
-function setVerdict(text) {
-  const h = $("#page-title");
-  if (h.dataset.text === text) return;
-  const first = h.dataset.text == null;
-  h.dataset.text = text;
-  const swap = () => { h.dataset.shown = h.dataset.text; h.innerHTML = wordsHTML(h.dataset.text); };
+const answer = { text: null, shown: null, summary: "", busy: false };
+function setAnswer(text, summary) {
+  const h = $("#page-title"), sum = $("#summary");
+  const first = answer.text == null;
+  answer.text = text;
+  answer.summary = summary;
+  if (answer.busy) return;            // the change in flight swaps in the newest sentence and evidence
+  if (answer.shown === text) { if (sum.innerHTML !== summary) sum.innerHTML = summary; return; }
+  const swap = () => {
+    answer.shown = answer.text;
+    h.innerHTML = wordsHTML(answer.text);
+    sum.innerHTML = answer.summary;
+  };
   if (document.body.classList.contains("intro") || first || reduced()) { swap(); return; }
-  if (setVerdict.busy) return;   // the roll in flight picks up the newest sentence when it swaps
-  setVerdict.busy = true;
+  answer.busy = true;
+  sum.animate([{ opacity: 1 }, { opacity: 0, transform: "translateY(-6px)" }], { duration: 260, easing: "ease-in", fill: "forwards" });
   const out = [...h.querySelectorAll(".w > span")];
   Promise.all(out.map((w, i) => w.animate([{ transform: "none" }, { transform: "translateY(-108%)" }],
     { duration: 320, delay: i * 22, easing: "cubic-bezier(0.7, 0, 0.84, 0)", fill: "forwards" }).finished)).then(() => {
@@ -278,11 +286,10 @@ function setVerdict(text) {
     const words = [...h.querySelectorAll(".w > span")];
     words.forEach((w, i) => w.animate([{ transform: "translateY(108%)" }, { transform: "none" }],
       { duration: 850, delay: i * 55, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "backwards" }));
+    sum.getAnimations().forEach((a) => a.cancel());
+    sum.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "backwards" });
     // Hold the new sentence long enough to be read, then catch up with anything that changed meanwhile.
-    setTimeout(() => {
-      setVerdict.busy = false;
-      if (h.dataset.shown !== h.dataset.text) { const t = h.dataset.text; h.dataset.text = h.dataset.shown; setVerdict(t); }
-    }, 700 + words.length * 55);
+    setTimeout(() => { answer.busy = false; setAnswer(answer.text, answer.summary); }, 700 + words.length * 55);
   });
 }
 
@@ -292,20 +299,19 @@ function renderSummary() {
   const online = all.filter((s) => s.online).length;
   const alerts = [...state.active.values()].sort(severityOrder);
   const reporting = online === all.length ? `All ${all.length} sensors reporting` : `${online} of ${all.length} sensors reporting`;
-  let text;
+  let text, verdict;
   if (!alerts.length) {
-    setVerdict(online === all.length ? "The air and water are fine." : "Everything reporting is fine.");
+    verdict = online === all.length ? "The air and water are fine." : "Everything reporting is fine.";
     text = `<strong>${reporting}</strong> and every reading is in range. The house will say so here the moment one is not.`;
   } else {
-    setVerdict(alerts.length === 1 ? headline(alerts[0]) : `${COUNT_WORD[alerts.length] ?? alerts.length} things need a look.`);
+    verdict = alerts.length === 1 ? headline(alerts[0]) : `${COUNT_WORD[alerts.length] ?? alerts.length} things need a look.`;
     const a = alerts[0];
     const s = state.sensors.get(a.sensor_id);
     const what = alertText(a).replace(/^[A-Z][a-z]/, (c) => c.toLowerCase());
     const more = alerts.length > 1 ? ` ${COUNT_WORD[alerts.length - 1]} more ${alerts.length - 1 > 1 ? "are" : "is"} open below.` : "";
     text = `<span class="bad">${esc(s ? sensorName(s) : a.sensor_id)}</span>: ${esc(what)}, since ${time(a.opened_at)}.${more} <strong>${reporting}.</strong>`;
   }
-  const sum = $("#summary");
-  if (sum.innerHTML !== text) sum.innerHTML = text;
+  setAnswer(verdict, text);
   $("#page-title").classList.toggle("hot", alerts.length > 0);
   $("#scope").textContent = `${all.length} sensors in ${new Set(all.map((s) => s.room)).size} rooms`;
   $("#online-count").textContent = `${online} of ${all.length} online`;
@@ -538,6 +544,7 @@ function renderLight() {
       <text class="now-label" x="${sx}" y="${T - 6}" text-anchor="${anchor(sx)}">${hhmm(state.scrub)}</text>`;
   }
   // Redraw only when something on the strip changed, so its bars can animate between renders.
+  if (state.scrub != null) svg.classList.remove("grow");   // scrubbing ends the entrance at once
   const key = `${W}|${H}|${c.hour}|${state.scrub}`;
   if (svg.dataset.key === key) return;
   svg.dataset.key = key;
