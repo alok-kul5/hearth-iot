@@ -33,110 +33,148 @@
     pill.style.transform = `translateX(${a.offsetLeft}px)`;
     pill.style.opacity = "1";
   }
+  /* ── Views: each section is its own page; only one is shown at a time ── */
+  // They live in one document so the simulated house keeps running between pages. The address carries
+  // the view (#history), so links, the back button and sharing all work.
+  const VIEW_NAMES = ["now", "history", "light", "sensors", "rules"];
+  const viewOf = (hash) => { const v = (hash || "").replace(/^#/, ""); return VIEW_NAMES.includes(v) ? v : "now"; };
+  const viewEls = (v) => all(`main [data-view="${v}"]`);
+  let view = null;
+  function showView(v) {
+    view = v;
+    all("main [data-view]").forEach((el) => { el.hidden = el.dataset.view !== v; });
+    body.dataset.view = v;
+    current = links.find((l) => l.getAttribute("href") === `#${v}`) ?? links[0];
+    links.forEach((l) => { l.classList.toggle("on", l === current); l.toggleAttribute("aria-current", l === current); });
+    if (!nav?.matches(":hover")) pillTo(current);
+    // Charts and the light strip measure their width, so they redraw once their page is visible.
+    dispatchEvent(new Event("resize"));
+    window.renderChart?.();
+    return viewEls(v)[0];
+  }
+  window.showView = showView;
+  showView(viewOf(location.hash));
+
   if (nav) {
     links.forEach((a) => a.addEventListener("pointerenter", () => pillTo(a)));
     nav.addEventListener("pointerleave", () => pillTo(current));
-    const sections = links.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
-    const spy = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) {
-        current = links.find((a) => a.getAttribute("href") === `#${e.target.id}`) ?? current;
-        links.forEach((a) => a.classList.toggle("on", a === current));
-        if (!nav.matches(":hover")) pillTo(current);
-      }
-    }, { rootMargin: "-35% 0px -60% 0px" });
-    sections.forEach((s) => spy.observe(s));
     document.fonts?.ready.then(() => pillTo(current));
     addEventListener("resize", () => pillTo(current));
-
-    // Changing section works like the opening. The pill you clicked grows into a field in the colour of the
-    // section you asked for, the section's own live figure counts up on it, and the field then folds down
-    // into that section's exact card, so it lands as the thing it was showing you.
-    let busy = false;
-    const SECTIONS = {
-      "#now": () => ({ n: state.sensors.size || 17, dec: 0, unit: "", cap: "sensors reporting<br>right now" }),
-      "#history": () => {
-        const v = document.getElementById("lead-value")?.textContent ?? "";
-        const m = v.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
-        return { n: m ? +m[0] : 0, dec: m?.[1] ? m[1].length - 1 : 0, unit: v.replace(/[-\d.,\s]/g, "").trim(),
-                 cap: `${document.getElementById("chart-h")?.textContent ?? "History"},<br>last 15 minutes` };
-      },
-      "#light": () => {
-        const k = +(document.getElementById("light-k")?.textContent ?? "").replace(/[^\d]/g, "") || 0;
-        return { n: k, dec: 0, unit: "K", cap: "the living room light,<br>right now" };
-      },
-      "#sensors": () => {
-        const t = document.getElementById("online-count")?.textContent ?? "";
-        const m = t.match(/(\d+)\D+(\d+)/);
-        return { n: m ? +m[1] : state.sensors.size, dec: 0, unit: "", cap: `of ${m ? m[2] : state.sensors.size} sensors<br>online` };
-      },
-      "#rules": () => ({ n: document.querySelectorAll("#rules-body tr").length || 12, dec: 0, unit: "", cap: "rules, each one<br>written down" }),
-    };
-    const fmtN = (v, dec) => v.toLocaleString("en-GB", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-    const rectInset = (r, round) => `inset(${Math.max(0, r.top)}px ${Math.max(0, innerWidth - r.right)}px ${Math.max(0, innerHeight - r.bottom)}px ${Math.max(0, r.left)}px round ${round})`;
-
-    links.forEach((a) => a.addEventListener("click", async (e) => {
-      const href = a.getAttribute("href");
-      const target = document.querySelector(href);
-      if (!target) return;
-      e.preventDefault();
-      current = a; links.forEach((l) => l.classList.toggle("on", l === a)); pillTo(a);
-      history.replaceState(null, "", href);
-      const scrollTarget = () => href === "#now" ? 0 : Math.max(0, target.getBoundingClientRect().top + scrollY - 84);
-      if (reducedMotion || busy || body.classList.contains("intro")) { scrollTo({ top: scrollTarget(), behavior: "instant" }); return; }
-      busy = true;
-
-      const cs = getComputedStyle(target);
-      const ground = cs.backgroundColor, ink = cs.color;
-      // For the light, the field starts in the light's own colour, softened halfway into the card's warm ground.
-      const rgb = (c) => (c.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map(Number);
-      const mix = (x, y, t) => { const [a1, b1, c1] = rgb(x), [a2, b2, c2] = rgb(y); return `rgb(${Math.round(a1 + (a2 - a1) * t)}, ${Math.round(b1 + (b2 - b1) * t)}, ${Math.round(c1 + (c2 - c1) * t)})`; };
-      const bulb = href === "#light" ? mix(getComputedStyle(document.getElementById("bulb")).backgroundColor, ground, 0.5) : null;
-      const fig = (SECTIONS[href] ?? SECTIONS["#now"])();
-      const field = document.createElement("div");
-      field.className = "transit";
-      field.style.background = bulb ?? ground; field.style.color = ink;
-      field.innerHTML = `<p class="transit-word">${a.textContent}</p>
-        <div class="transit-count"><span class="transit-n">${fmtN(0, fig.dec)}</span>${fig.unit ? `<span class="transit-unit">${fig.unit}</span>` : ""}<span class="transit-cap">${fig.cap}</span></div>
-        <span class="transit-line"><span></span></span>`;
-      document.body.append(field);
-      const num = field.querySelector(".transit-n"), line = field.querySelector(".transit-line span");
-      const parts = [field.querySelector(".transit-word"), field.querySelector(".transit-count")];
-
-      // 1. The pill grows to fill the screen.
-      const from = (pill && pill.getBoundingClientRect().width ? pill : a).getBoundingClientRect();
-      const grow = anim(field, [{ clipPath: rectInset(from, "999px") }, { clipPath: "inset(0px 0px 0px 0px round 0px)" }], { duration: 640, easing: IO, fill: "forwards" });
-      // 2. The figure counts up as it opens.
-      parts.forEach((p, i) => anim(p, [{ opacity: 0, transform: "translateY(26px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: 300 + i * 60, fill: "both" }));
-      const t0 = performance.now() + 340, COUNT = 760;
-      await new Promise((done) => {
-        const tick = (now) => {
-          const k = Math.min(1, Math.max(0, (now - t0) / COUNT)), eased = 1 - Math.pow(1 - k, 4);
-          num.textContent = fmtN(fig.n * eased, fig.dec);
-          line.style.transform = `scaleX(${Math.max(0.02, eased)})`;
-          k < 1 ? requestAnimationFrame(tick) : done();
-        };
-        requestAnimationFrame(tick);
-      });
-      await grow.finished;
-      // 3. Behind the field, the page moves to the section.
-      scrollTo({ top: scrollTarget(), behavior: "instant" });
-      await wait(220);
-      // 4. The figure leaves upward and the field folds into the section's own card.
-      anim(parts[1], [{ transform: "none", opacity: 1 }, { transform: "translateY(-48px)", opacity: 0 }], { duration: 480, easing: "cubic-bezier(0.7, 0, 0.84, 0)", fill: "forwards" });
-      anim(parts[0], [{ opacity: 1 }, { opacity: 0 }], { duration: 280, fill: "forwards" });
-      anim(field.querySelector(".transit-line"), [{ opacity: 1 }, { opacity: 0 }], { duration: 280, fill: "forwards" });
-      const to = target.getBoundingClientRect(), FOLD = 900;
-      anim(field, [{ clipPath: "inset(0px 0px 0px 0px round 0px)", background: bulb ?? ground }, { clipPath: rectInset(to, "18px"), background: ground }], { duration: FOLD, delay: 160, easing: IO, fill: "forwards" });
-      const land = 160 + Math.round(FOLD * 0.85);
-      // 5. As it lands, the section's own parts take over, the way the hero assembles after the opening.
-      const inside = target.matches(".hero") ? all(".hero-read > *, .plan-head, .plan-wrap, .readings-head, #tiles .tile", target)
-        : all(":scope > header, .panel-head, .chart-lead, .chart, .light-now, .daystrip, .sensor-list li, tbody tr, #alerts > li", target).slice(0, 18);
-      inside.forEach((el, i) => anim(el, [{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: land - 120 + Math.min(i, 12) * 45 }));
-      await wait(land);
-      field.remove();
-      busy = false;
-    }));
   }
+
+  // Changing page works like the opening. The pill grows into a field in the colour of the page you asked
+  // for, that page's own live figure counts up on it, the page changes behind it, and the field folds down
+  // into the page's main card, so it lands as the thing it was showing you.
+  let busy = false;
+  const FIGURES = {
+    now: () => ({ n: state.sensors.size || 17, dec: 0, unit: "", cap: "sensors reporting<br>right now" }),
+    history: () => {
+      const v = document.getElementById("lead-value")?.textContent ?? "";
+      const m = v.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+      return { n: m ? +m[0] : 0, dec: m?.[1] ? m[1].length - 1 : 0, unit: v.replace(/[-\d.,\s]/g, "").trim(),
+               cap: `${document.getElementById("chart-h")?.textContent ?? "History"},<br>last 15 minutes` };
+    },
+    light: () => {
+      const k = +(document.getElementById("light-k")?.textContent ?? "").replace(/[^\d]/g, "") || 0;
+      return { n: k, dec: 0, unit: "K", cap: "the living room light,<br>right now" };
+    },
+    sensors: () => {
+      const t = document.getElementById("online-count")?.textContent ?? "";
+      const m = t.match(/(\d+)\D+(\d+)/);
+      return { n: m ? +m[1] : state.sensors.size, dec: 0, unit: "", cap: `of ${m ? m[2] : state.sensors.size} sensors<br>online` };
+    },
+    rules: () => ({ n: document.querySelectorAll("#rules-body tr").length || 12, dec: 0, unit: "", cap: "rules, each one<br>written down" }),
+  };
+  const NAMES = { now: "Now", history: "History", light: "Light", sensors: "Sensors", rules: "Rules" };
+  const fmtN = (v, dec) => v.toLocaleString("en-GB", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const rectInset = (r, round) => `inset(${Math.max(0, r.top)}px ${Math.max(0, innerWidth - r.right)}px ${Math.max(0, innerHeight - r.bottom)}px ${Math.max(0, r.left)}px round ${round})`;
+
+  async function go(v, fromEl) {
+    if (v === view && scrollY < 40) return;
+    if (location.hash !== `#${v}`) history.pushState(null, "", `#${v}`);
+    if (reducedMotion || busy || body.classList.contains("intro") || !document.querySelector(".hero")) {
+      showView(v); scrollTo({ top: 0, behavior: "instant" }); return;
+    }
+    busy = true;
+    const link = links.find((l) => l.getAttribute("href") === `#${v}`);
+    if (link) { links.forEach((l) => l.classList.toggle("on", l === link)); pillTo(link); }
+
+    const main = viewEls(v)[0];
+    const wasHidden = main.hidden; main.hidden = false;
+    const cs = getComputedStyle(main);
+    const ground = cs.backgroundColor, ink = cs.color;
+    main.hidden = wasHidden;
+    // The light's page opens in the light's own colour, then settles into its card.
+    const bulb = v === "light" ? getComputedStyle(document.getElementById("bulb")).backgroundColor : null;
+    const fig = FIGURES[v]();
+    const field = document.createElement("div");
+    field.className = "transit";
+    field.style.background = bulb ?? ground; field.style.color = ink;
+    field.innerHTML = `<p class="transit-word">${NAMES[v]}</p>
+      <div class="transit-count"><span class="transit-n">${fmtN(0, fig.dec)}</span>${fig.unit ? `<span class="transit-unit">${fig.unit}</span>` : ""}<span class="transit-cap">${fig.cap}</span></div>
+      <span class="transit-line"><span></span></span>`;
+    document.body.append(field);
+    const num = field.querySelector(".transit-n"), line = field.querySelector(".transit-line span");
+    const parts = [field.querySelector(".transit-word"), field.querySelector(".transit-count")];
+
+    // 1. Whatever was clicked grows to fill the screen.
+    const src = fromEl ?? (pill && pill.getBoundingClientRect().width ? pill : link);
+    const from = src ? src.getBoundingClientRect() : { top: innerHeight / 2, left: innerWidth / 2, right: innerWidth / 2, bottom: innerHeight / 2 };
+    const grow = anim(field, [{ clipPath: rectInset(from, "999px") }, { clipPath: "inset(0px 0px 0px 0px round 0px)" }], { duration: 640, easing: IO, fill: "forwards" });
+    // 2. The page's figure counts up as it opens.
+    parts.forEach((p, i) => anim(p, [{ opacity: 0, transform: "translateY(26px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: 300 + i * 60, fill: "both" }));
+    const t0 = performance.now() + 340, COUNT = 760;
+    await new Promise((done) => {
+      const tick = (now) => {
+        const k = Math.min(1, Math.max(0, (now - t0) / COUNT)), eased = 1 - Math.pow(1 - k, 4);
+        num.textContent = fmtN(fig.n * eased, fig.dec);
+        line.style.transform = `scaleX(${Math.max(0.02, eased)})`;
+        k < 1 ? requestAnimationFrame(tick) : done();
+      };
+      requestAnimationFrame(tick);
+    });
+    await grow.finished;
+    // 3. Behind the field, the page changes.
+    showView(v);
+    scrollTo({ top: 0, behavior: "instant" });
+    viewEls(v).forEach((el) => el.classList.remove("waiting"));
+    await wait(200);
+    // 4. The figure leaves upward and the field folds into the page's main card.
+    anim(parts[1], [{ transform: "none", opacity: 1 }, { transform: "translateY(-48px)", opacity: 0 }], { duration: 480, easing: "cubic-bezier(0.7, 0, 0.84, 0)", fill: "forwards" });
+    anim(parts[0], [{ opacity: 1 }, { opacity: 0 }], { duration: 280, fill: "forwards" });
+    anim(field.querySelector(".transit-line"), [{ opacity: 1 }, { opacity: 0 }], { duration: 280, fill: "forwards" });
+    const to = main.getBoundingClientRect(), FOLD = 900;
+    anim(field, [{ clipPath: "inset(0px 0px 0px 0px round 0px)", background: bulb ?? ground }, { clipPath: rectInset(to, "18px"), background: ground }], { duration: FOLD, delay: 160, easing: IO, fill: "forwards" });
+    const land = 160 + Math.round(FOLD * 0.85);
+    // 5. As it lands, the page's own parts take over, the way the hero assembles after the opening.
+    const els = viewEls(v);
+    const inside = main.matches(".hero")
+      ? all(".hero-read > *, .plan-head, .plan-wrap, .readings-head, #tiles .tile", main)
+      : all(":scope > header, .panel-head, .chart-lead, .chart, .light-now, .daystrip, .sensor-list li, tbody tr", main).slice(0, 18);
+    inside.forEach((el, i) => anim(el, [{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: land - 120 + Math.min(i, 12) * 45 }));
+    // The page's other cards and the footer rise in beside it.
+    [...els.slice(1), document.querySelector(".foot")].forEach((el, i) => el && anim(el, [{ opacity: 0, transform: "translateY(32px)" }, { opacity: 1, transform: "none" }], { duration: 900, delay: land - 60 + i * 90 }));
+    if (v === "history") setTimeout(() => { renderChart.drawIn = true; renderChart(); }, land);
+    await wait(land);
+    field.remove();
+    busy = false;
+  }
+
+  links.forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); go(viewOf(a.getAttribute("href"))); }));
+  // Links inside the pages that point at another page.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest('a[href="#log-h"]');
+    if (a) { e.preventDefault(); go("sensors", a); }
+  });
+  // Picking a room on the plan, or a sensor in the list, opens its history.
+  document.addEventListener("click", (e) => {
+    const pick = e.target.closest("#plan .room[data-sensor], #sensors-list button");
+    if (pick && view !== "history") setTimeout(() => go("history", pick), 0);
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.closest?.("#plan .room[data-sensor]") && view !== "history") setTimeout(() => go("history", e.target), 0);
+  });
+  addEventListener("popstate", () => { showView(viewOf(location.hash)); scrollTo({ top: 0, behavior: "instant" }); });
 
   if (reducedMotion) {
     curtain?.remove();
@@ -164,7 +202,7 @@
   }
 
   function fold() {
-    const hero = document.querySelector(".hero");
+    const hero = viewEls(view)[0] ?? document.querySelector(".hero");
     const r = hero.getBoundingClientRect();
     const inset = `inset(${r.top}px ${innerWidth - r.right}px ${Math.max(0, innerHeight - r.bottom)}px ${r.left}px round 18px)`;
     const FOLD = 1000;
@@ -250,7 +288,7 @@
     }
   }
   const observer = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) { observer.unobserve(e.target); reveal(e.target, 0); }
+    for (const e of entries) if (e.isIntersecting) { observer.unobserve(e.target); if (e.target.classList.contains("waiting")) reveal(e.target, 0); }
   }, { rootMargin: "0px 0px -10% 0px" });
 
   /* ── Transitions after the opening ─────────────────── */

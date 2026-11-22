@@ -60,7 +60,7 @@
 
   <main class="canvas">
     <!-- The hero: the house's one answer on the deep-green field, the plan beside it, the readings along its foot. -->
-    <section class="hero" id="now" aria-labelledby="page-title">
+    <section class="hero" id="now" data-view="now" aria-labelledby="page-title">
       <div class="hero-read">
         <h1 id="page-title" class="verdict" aria-live="polite">Checking the house</h1>
         <p class="summary" id="summary">Waiting for the first readings.</p>
@@ -99,7 +99,7 @@
 
     <!-- Below the hero: a 12-column grid, 12px gaps, panels one tone step off the ground. 8 + 4 and 12 spans. -->
     <div class="grid">
-      <section class="panel span-8 chart-panel reveal" id="history" aria-labelledby="chart-h">
+      <section class="panel span-8 chart-panel reveal" id="history" data-view="history" aria-labelledby="chart-h">
         <header class="panel-head">
           <div>
             <h2 id="chart-h">History</h2>
@@ -119,7 +119,7 @@
         <div class="chart" id="chart"></div>
       </section>
 
-      <section class="panel span-4 alerts-card reveal" aria-labelledby="alerts-h">
+      <section class="panel span-4 alerts-card reveal" data-view="history" aria-labelledby="alerts-h">
         <header class="panel-head">
           <h2 id="alerts-h">Open alerts</h2>
           <span class="count" id="alert-count">0</span>
@@ -128,7 +128,7 @@
         <a class="panel-foot" href="#log-h">See the full alert log</a>
       </section>
 
-      <section class="panel span-12 light-card reveal" id="light" aria-labelledby="light-h">
+      <section class="panel span-12 light-card reveal" id="light" data-view="light" aria-labelledby="light-h">
         <div class="light-read">
           <header>
             <h2 id="light-h">Living room light</h2>
@@ -148,7 +148,7 @@
         </div>
       </section>
 
-      <section class="panel span-4 sensors-card reveal" id="sensors" aria-labelledby="sensors-h">
+      <section class="panel span-4 sensors-card reveal" id="sensors" data-view="sensors" aria-labelledby="sensors-h">
         <header class="panel-head">
           <h2 id="sensors-h">All sensors</h2>
           <p class="panel-meta" id="online-count"></p>
@@ -156,7 +156,7 @@
         <ul class="sensor-list" id="sensors-list"></ul>
       </section>
 
-      <section class="panel span-8 reveal" aria-labelledby="log-h">
+      <section class="panel span-8 reveal" aria-labelledby="log-h" data-view="sensors">
         <header class="panel-head">
           <h2 id="log-h">Alert log</h2>
           <p class="panel-meta">Last 8 alerts</p>
@@ -167,7 +167,7 @@
         </table>
       </section>
 
-      <section class="panel span-12 reveal" id="rules" aria-labelledby="rules-h">
+      <section class="panel span-12 reveal" id="rules" data-view="rules" aria-labelledby="rules-h">
         <header class="panel-head">
           <h2 id="rules-h">Rules</h2>
           <p class="panel-meta">From rules.yaml. An alert opens once its condition has held for the time shown.</p>

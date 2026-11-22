@@ -470,3 +470,8 @@ a { color: inherit; }
 .transit-line::before { content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0.18; }
 .transit-line span { position: absolute; inset: 0; background: currentColor; transform: scaleX(0.02); transform-origin: left; }
 @media (max-width: 700px) { .transit { padding: 24px 20px; } .transit-cap { font-size: 17px; } .transit-count { gap: 14px; } }
+
+/* One page at a time. The hero page has no grid gap above it; the others start where the hero would. */
+main [data-view][hidden] { display: none !important; }
+body:not([data-view="now"]) .grid { margin-top: 0; }
+body:not([data-view="now"]) .canvas { min-height: calc(100svh - 84px); }
