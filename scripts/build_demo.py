@@ -25,8 +25,11 @@ from app.circadian import KEYFRAMES  # noqa: E402
 STATIC = ROOT / "backend" / "app" / "static"
 
 
-def build(out: Path) -> None:
-    shutil.rmtree(out, ignore_errors=True)
+def build(root_out: Path) -> None:
+    shutil.rmtree(root_out, ignore_errors=True)
+    # The landing page sits at the root; the live dashboard at /live/.
+    shutil.copytree(ROOT / "site", root_out, ignore=shutil.ignore_patterns("credits.json"))
+    out = root_out / "live"
     shutil.copytree(STATIC, out / "static")
     shutil.copy(ROOT / "demo" / "demo.js", out / "static" / "demo.js")
 
@@ -40,7 +43,7 @@ def build(out: Path) -> None:
     assert app in html, "index.html no longer loads app.js the expected way"
     html = html.replace(app, '<script src="static/demo.js" defer></script>\n  ' + app)
     (out / "index.html").write_text(html, encoding="utf-8")
-    (out / ".nojekyll").write_text("", encoding="utf-8")
+    (root_out / ".nojekyll").write_text("", encoding="utf-8")
 
 
 if __name__ == "__main__":

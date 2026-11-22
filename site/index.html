@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearth · A home that keeps itself well</title>
+<meta name="description" content="Hearth is a local-first smart home system. Seventeen sensors watch the air, the water and the light, and the house acts on what they find.">
+<link rel="icon" href="live/static/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="split">
+  <main class="read">
+
+    <section class="sheet" id="top" data-scene="0">
+      <nav class="bar" aria-label="Main">
+        <a href="#watch">What it watches</a>
+        <a class="word" href="#top" aria-label="Hearth, back to top">Hearth</a>
+        <a href="https://github.com/alok-kul5/hearth-iot">The code</a>
+      </nav>
+      <div class="sheet__body">
+        <h1 data-in>Air, light and water, kept well</h1>
+        <p class="lead" data-in>Hearth is a local-first smart home. Seventeen sensors watch the air, the water and the light in every room, and the house quietly acts on what they find.</p>
+        <a class="btn" href="live/" data-in>Open the live home</a>
+      </div>
+    </section>
+
+    <section class="intro" aria-labelledby="intro-h" data-scene="1">
+      <h2 id="intro-h" class="vh">What Hearth is</h2>
+      <p class="first" data-in>Most smart homes are switches you reach from a phone. Hearth is the other half: it notices. When the bedroom air goes stale at three in the morning, it opens the ventilation before anyone wakes with a headache.</p>
+      <p data-in>Everything runs inside the house. Readings travel over MQTT to a small server on the local network, so the lights, the air and the leak alarms keep working when the internet does not.</p>
+      <p data-in>Every sensor also appears in Home Assistant on its own, grouped by room, so a household can add its own routines on top.</p>
+      <p data-in>The rules are plain and written down. Nothing is guessed, and nothing happens that the house cannot explain. <a href="#slip">Read one evening of them</a>.</p>
+    </section>
+
+    <section class="show" aria-labelledby="show-h" data-scene="2">
+      <figure class="plate" data-ui>
+        <img id="plate-img" src="assets/ui-air.jpg" width="1040" height="1040" alt="Hearth's dashboard: carbon dioxide, PM2.5 and the floor plan of the living room and kitchen" loading="lazy">
+      </figure>
+      <div class="show__text">
+        <div class="tabs" role="tablist" aria-label="What the dashboard shows">
+          <button role="tab" aria-selected="true" data-tab="air">Air</button>
+          <button role="tab" aria-selected="false" data-tab="water">Water</button>
+          <button role="tab" aria-selected="false" data-tab="house">The house</button>
+        </div>
+        <div>
+          <h2 id="show-h">The air, room by room</h2>
+          <p id="show-p">Carbon dioxide in the living room and bedroom, fine dust from the kitchen, and chemical fumes from cleaning sprays. Each reading says whether it is fresh, getting stale or over its limit.</p>
+        </div>
+        <div class="cells">
+          <a class="cell cell--ink" href="live/">See it live</a>
+          <a class="cell" href="https://github.com/alok-kul5/hearth-iot#how-it-works">How it works</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <aside class="stage" aria-label="One day in the home">
+    <div class="stage__frame">
+      <div class="stage__pics">
+      <img class="stage__img is-on" src="assets/linen.jpg" width="1024" height="683" alt="Morning sun through a linen curtain onto a wooden floor">
+      <img class="stage__img" src="assets/texas-hill-country-near-medina.jpg" width="1920" height="1440" alt="A limestone hill above a meadow in the Texas Hill Country" loading="lazy">
+      <img class="stage__img" src="assets/hill-country-morning.jpg" width="1920" height="1440" alt="Morning sun breaking over hills and a river" loading="lazy">
+      <div class="stage__wash" aria-hidden="true"></div>
+      </div>
+      <div class="hours">
+        <output id="clock" for="day">07:30</output>
+        <label class="hours__drag">
+          <span id="lightline">Lights at 4,250 K, 85%</span>
+          <input id="day" type="range" min="0" max="1439" step="10" value="450" aria-label="Drag through the day to see the lighting Hearth sets">
+        </label>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<section class="slip-sec" id="slip" aria-labelledby="slip-h">
+  <div class="slip-sec__text">
+    <h2 id="slip-h" data-in>One evening</h2>
+    <p data-in>These are the real rules Hearth runs, played through one ordinary evening. A limit has to hold for a while before anything moves, and it has to clear properly before anything stops, so nothing flickers.</p>
+  </div>
+  <div class="slip" data-in>
+    <h3>Dinner in the kitchen</h3>
+    <ol>
+      <li><span>Onions on the hob, dust starts to rise</span><i></i><b>18:40</b></li>
+      <li><span>PM2.5 passes 35 µg/m³</span><i></i><b>18:42</b></li>
+      <li><span>Held for 30 seconds, ventilation on</span><i></i><b>18:42</b></li>
+      <li><span>Back under 15 µg/m³, ventilation off</span><i></i><b>19:05</b></li>
+    </ol>
+    <h3>A spill under the sink</h3>
+    <ol>
+      <li><span>Leak sensor goes wet</span><i></i><b>21:16</b></li>
+      <li><span>Alert raised at once, no waiting</span><i></i><b>21:16</b></li>
+    </ol>
+    <h3>Two people asleep, door shut</h3>
+    <ol>
+      <li><span>Bedroom CO₂ passes 1,000 ppm</span><i></i><b>02:30</b></li>
+      <li><span>Held for five minutes, ventilation on</span><i></i><b>02:35</b></li>
+      <li><span>Under 800 ppm, ventilation off</span><i></i><b>03:20</b></li>
+    </ol>
+    <p class="slip__total"><span>Clean air all night, no switch touched</span><b>3 rules</b></p>
+  </div>
+</section>
+
+<section class="watch" id="watch" aria-labelledby="watch-h">
+  <h2 id="watch-h" class="watch__h">What it watches</h2>
+  <div class="watch__rows">
+    <article class="row" data-in>
+      <h3>Air</h3>
+      <div class="row__pair">
+        <img src="assets/fog-922.jpg" width="1200" height="1600" alt="A dark treeline fading upward into fog" loading="lazy">
+        <ul>
+          <li>Carbon dioxide in the living room and bedroom</li>
+          <li>PM2.5 dust from cooking</li>
+          <li>VOCs from paint and cleaning sprays</li>
+          <li>Ventilation that runs until the last alert clears</li>
+          <li>Limits from WHO and EPA guidance</li>
+        </ul>
+      </div>
+    </article>
+    <article class="row row--flip" data-in>
+      <h3>Water</h3>
+      <div class="row__pair">
+        <img src="assets/hill-country-morning.jpg" width="1920" height="1440" alt="Morning sun breaking over hills and a river" loading="lazy">
+        <ul>
+          <li>Dissolved solids at the kitchen tap</li>
+          <li>A warning when a filter starts to wear</li>
+          <li>Leak sensors under the sinks</li>
+          <li>Leaks alert at once, they never wait</li>
+        </ul>
+      </div>
+    </article>
+    <article class="row" data-in>
+      <h3>Light</h3>
+      <div class="row__pair">
+        <img src="assets/linen.jpg" width="1024" height="683" alt="Low sun through a linen curtain" loading="lazy">
+        <ul>
+          <li>Cool and bright through the middle of the day</li>
+          <li>Warm and dim from eight in the evening</li>
+          <li>A 3% night light after eleven</li>
+          <li>Set by the home's own time zone</li>
+        </ul>
+      </div>
+    </article>
+    <article class="row row--flip" data-in>
+      <h3>The house</h3>
+      <div class="row__pair">
+        <img src="assets/texas-viewscape-2008.jpg" width="1920" height="1124" alt="Live oaks standing at the edge of open Texas land" loading="lazy">
+        <ul>
+          <li>Temperature and humidity in six rooms</li>
+          <li>Movement in the hallway</li>
+          <li>Doors left open for over a minute</li>
+          <li>A sensor that goes quiet for 30 seconds</li>
+        </ul>
+      </div>
+    </article>
+    <article class="row row--code" data-in>
+      <h3>Your own routines</h3>
+      <p>Each sensor announces itself to Home Assistant, so adding a routine is a few lines.</p>
+<pre><code>automation:
+  - alias: Bedroom air at night
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.hearth_co2_bedroom
+        above: 1000
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.hearth_erv_main</code></pre>
+    </article>
+  </div>
+</section>
+
+<section class="proof" aria-labelledby="proof-h">
+  <h2 id="proof-h" class="proof__lead">Built on open parts</h2>
+  <ul class="proof__names">
+    <li>Home Assistant</li><li>MQTT</li><li>Mosquitto</li><li>FastAPI</li><li>Docker</li><li>ESP32 ready</li>
+  </ul>
+</section>
+
+<section class="close" aria-labelledby="close-h">
+  <img class="close__img" src="assets/texas-hill-country-near-medina.jpg" width="1920" height="1440" alt="Clear sky over a limestone hill and meadow in the Texas Hill Country" loading="lazy">
+  <div class="close__text">
+    <h2 id="close-h" data-in>Watch the house breathe</h2>
+    <p data-in>The live home runs the same rules in your browser. Cook dinner, invite friends, spill some water, and see what Hearth does.</p>
+    <a class="btn btn--paper" href="live/" data-in>Open the live home</a>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>Hearth, a home that keeps itself well</span>
+  <span class="foot__links"><a href="live/">Live home</a><a href="https://github.com/alok-kul5/hearth-iot">Code</a><a href="https://alok.is-a.dev">Alok Kulkarni</a></span>
+  <span>2026 · MIT licence</span>
+  <p class="credits">Pictures: <a href="https://commons.wikimedia.org/w/index.php?curid=33453826">“Hill country morning”</a> by Christian_Hunter, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>; <a href="https://commons.wikimedia.org/w/index.php?curid=118426030">“Texas-Hill-Country-Near-Medina”</a> by Lorenzo The Snail, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>; <a href="https://commons.wikimedia.org/w/index.php?curid=4965862">“Texas Viewscape 2008”</a> by Baytownbert, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>, all via Wikimedia Commons; linen curtain via <a href="https://www.rawpixel.com/image/3285030/free-photo-image-morning-wooden-floor-sun-light-interior-decorations">rawpixel</a>, CC0; fog by Patrick Hendry via Unsplash.</p>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>
