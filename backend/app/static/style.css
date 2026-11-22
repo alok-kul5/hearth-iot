@@ -457,3 +457,7 @@ a { color: inherit; }
   .intro .hero > *, .intro .reveal, .intro .bar, .reveal.waiting { opacity: 1; }
   .cursor-label { display: none; }
 }
+
+/* Page change from the navbar: a green field sweeps up under the bar with the section's name. */
+.pagewipe { position: fixed; inset: 0; z-index: 29; background: var(--field); display: grid; place-items: center; pointer-events: none; clip-path: inset(100% 0 0 0); }
+.pagewipe span { font: 400 clamp(3rem, 2rem + 5vw, 7rem)/1 var(--serif); letter-spacing: -0.02em; color: var(--field-ink); opacity: 0; }

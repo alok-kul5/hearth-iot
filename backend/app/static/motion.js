@@ -47,6 +47,40 @@
     sections.forEach((s) => spy.observe(s));
     document.fonts?.ready.then(() => pillTo(current));
     addEventListener("resize", () => pillTo(current));
+
+    // Changing section is a page change: a green field sweeps up under the bar carrying the section's
+    // name, the page moves behind it, then the field lifts away and the section's parts rise in.
+    let busy = false;
+    links.forEach((a) => a.addEventListener("click", async (e) => {
+      const target = document.querySelector(a.getAttribute("href"));
+      if (!target) return;
+      e.preventDefault();
+      current = a; links.forEach((l) => l.classList.toggle("on", l === a)); pillTo(a);
+      history.replaceState(null, "", a.getAttribute("href"));
+      const top = a.getAttribute("href") === "#now" ? 0 : Math.max(0, target.getBoundingClientRect().top + scrollY - 84);
+      if (reducedMotion || busy) { scrollTo({ top, behavior: "instant" }); return; }
+      busy = true;
+      const wipe = document.createElement("div");
+      wipe.className = "pagewipe";
+      wipe.innerHTML = `<span>${a.textContent}</span>`;
+      document.body.append(wipe);
+      const word = wipe.firstElementChild;
+      await anim(wipe, [{ clipPath: "inset(100% 0 0 0)" }, { clipPath: "inset(0 0 0 0)" }], { duration: 460, easing: IO, fill: "forwards" }).finished;
+      anim(word, [{ opacity: 0, transform: "translateY(30px)" }, { opacity: 1, transform: "none" }], { duration: 420, fill: "forwards" });
+      scrollTo({ top, behavior: "instant" });
+      await wait(320);
+      anim(word, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-36px)" }], { duration: 360, easing: "cubic-bezier(0.7, 0, 0.84, 0)", fill: "forwards" });
+      await anim(wipe, [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }], { duration: 560, delay: 120, easing: IO, fill: "forwards" }).finished;
+      wipe.remove();
+      busy = false;
+    }));
+    // The parts of the section that was arrived at rise in, once the field starts lifting.
+    links.forEach((a) => a.addEventListener("click", () => {
+      const target = document.querySelector(a.getAttribute("href"));
+      if (!target || reducedMotion || target.classList.contains("waiting")) return;
+      const parts = target.matches(".hero") ? all(".hero-read > *, .plan-head, .plan-wrap, .readings-head, #tiles", target) : [target];
+      parts.forEach((p, i) => rise(p, 900 + i * 70, 26, 800));
+    }));
   }
 
   if (reducedMotion) {
