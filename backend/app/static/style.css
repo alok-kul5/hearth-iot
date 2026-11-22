@@ -152,8 +152,9 @@ a { color: inherit; }
 .room:active { transform: scale(0.99); }
 .room rect.edge { fill: none; stroke: transparent; stroke-width: 1.5; transition: stroke 0.3s; }
 .room.selected rect.edge { stroke: var(--field-ink); }
-.room.alerting rect.floor { fill: #4a3f37; }
-.room.alerting rect.edge { stroke: var(--field-hot); }
+.room.alerting rect.floor { fill: #444e44; }
+.room.alerting rect.edge { stroke: var(--field-hot); animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 50% { stroke-opacity: 0.35; } }
 .room:focus-visible { outline: none; }
 .room:focus-visible rect.edge { stroke: var(--field-ink); stroke-width: 2.5; }
 .room text { fill: var(--field-ink); }
