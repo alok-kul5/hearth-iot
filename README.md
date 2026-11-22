@@ -6,7 +6,7 @@
 
 <p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><b>Live demo →</b></a></p>
 
-<p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><img src="docs/demo.gif" width="860" alt="Cooking dinner in the demo: smoke rises in the kitchen, PM2.5 crosses its limit, the ventilation switches on and pulls the air out, then the light is dragged through the day"></a></p>
+<p align="center"><a href="https://alok-kul5.github.io/hearth-iot/"><img src="docs/demo.gif" width="860" alt="The demo opening: sensors check in, then the answer appears on a deep-green field beside the floor plan. Dinner is cooked and the time-lapse runs, the answer changes as alerts open, then the light is dragged through the day"></a></p>
 
 [![CI](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-kul5/hearth-iot/actions/workflows/ci.yml)
 
@@ -92,7 +92,7 @@ flowchart LR
 | `backend/app/circadian.py` | The circadian lighting schedule, and when to send the light a new setpoint. |
 | `backend/app/ha_discovery.py` | Builds the Home Assistant MQTT Discovery config for each sensor. |
 | `backend/app/storage.py` | SQLite in WAL mode: raw readings, latest state per sensor, and the alert history. Long time ranges are averaged into about 300 points for the chart, and old readings are pruned after 24 hours. |
-| `backend/app/static/` | Dashboard in plain JavaScript with hand-drawn SVG charts and no framework. Ink on a warm stone ground, with colour only on readings that are out of range and on the light itself. It loads state over REST, then follows the live feed and reconnects on its own if the connection drops. |
+| `backend/app/static/` | Dashboard in plain JavaScript with hand-drawn SVG charts and no framework. The house's one answer is set large on a deep-green field beside the floor plan; the rest sits in quiet panels, with colour only on readings that are out of range and on the light itself. It loads state over REST, then follows the live feed and reconnects on its own if the connection drops. |
 
 ### Sensors
 
