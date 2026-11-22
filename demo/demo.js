@@ -372,16 +372,11 @@
 
   /* ── A note saying what this page is ────────────────── */
   document.addEventListener("DOMContentLoaded", () => {
-    const style = document.createElement("style");
-    style.textContent = `.demo-note { margin-top: 8px; font-size: 13px; line-height: 20px; color: var(--muted); }
-      .demo-note strong { color: var(--text); font-weight: 500; }
-      .demo-note a { color: var(--text); text-decoration: underline; text-decoration-color: var(--control); text-underline-offset: 3px; }
-      .demo-note a:hover { text-decoration-color: var(--text); }`;
-    document.head.append(style);
+    // The dashboard's stylesheet styles .demo-note; it sits at the foot of the hero.
     const note = document.createElement("p");
     note.className = "demo-note";
     note.innerHTML = `<strong>Live demo, simulated in your browser.</strong> The real version runs on MQTT, Mosquitto and FastAPI: <a href="https://github.com/alok-kul5/hearth-iot">see the code on GitHub</a>.`;
-    document.querySelector(".title-row > div")?.append(note);
+    (document.getElementById("hero-note") ?? document.querySelector(".title-row > div"))?.prepend(note);
     const tryRow = document.getElementById("try");
     if (tryRow) {
       const skip = document.createElement("button");

@@ -4,28 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#21362f">
   <title>Hearth · Home overview</title>
   <link rel="icon" href="/static/mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/living.js" defer></script>
+  <script src="/static/motion.js" defer></script>
+  <noscript><style>.curtain { display: none; } .intro .hero > *, .intro .reveal { opacity: 1 !important; }</style></noscript>
 </head>
-<body>
+<body class="intro">
+  <!-- The opening: a green field counts the sensors in, then folds down into the hero. It removes itself after 4 s if scripts fail. -->
+  <div class="curtain" id="curtain" aria-hidden="true">
+    <p class="curtain-word">Hearth</p>
+    <div class="curtain-count">
+      <span class="curtain-n" id="curtain-n">00</span>
+      <span class="curtain-cap">of <span id="curtain-total">17</span> sensors<br>checked in</span>
+    </div>
+    <span class="curtain-line"><span id="curtain-bar"></span></span>
+  </div>
+
   <header class="topbar">
     <div class="bar">
-      <a class="brand" href="/" aria-label="Hearth, home overview">
+      <a class="brand" href="./" aria-label="Hearth, home overview">
         <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-          <rect width="32" height="32" rx="7" fill="currentColor"/>
-          <path d="M8 15.4 16 8.6l8 6.8V23a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M12.6 19.2a4.8 4.8 0 0 1 6.8 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="16" cy="21.4" r="1.2" fill="#fff"/>
+          <rect width="32" height="32" rx="9" fill="currentColor"/>
+          <path d="M8 15.4 16 8.6l8 6.8V23a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" fill="none" stroke="#eef1ec" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M12.6 19.2a4.8 4.8 0 0 1 6.8 0" fill="none" stroke="#eef1ec" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="16" cy="21.4" r="1.2" fill="#eef1ec"/>
         </svg>
         <span class="brand-name">Hearth</span>
       </a>
       <span class="scope" id="scope">17 sensors in 6 rooms</span>
+      <nav class="jump" id="jump" aria-label="Sections">
+        <span class="jump-pill" aria-hidden="true"></span>
+        <a href="#now">Now</a>
+        <a href="#history">History</a>
+        <a href="#light">Light</a>
+        <a href="#sensors">Sensors</a>
+        <a href="#rules">Rules</a>
+      </nav>
       <div class="pipeline" aria-label="Where the readings come from">
         <span id="via">Live over MQTT</span>
         <span class="rate" id="rate"></span>
@@ -38,58 +59,51 @@
   </header>
 
   <main class="canvas">
-    <!-- Grid: a 1152px column of 12 x 85px with 12px gutters. 8 + 4 spans: 764 + 12 + 376 = 1152. -->
-    <section class="title-row" aria-labelledby="page-title">
-      <div>
-        <h1 id="page-title">Home overview</h1>
+    <!-- The hero: the house's one answer on the deep-green field, the plan beside it, the readings along its foot. -->
+    <section class="hero" id="now" aria-labelledby="page-title">
+      <div class="hero-read">
+        <h1 id="page-title" class="verdict" aria-live="polite">Checking the house</h1>
         <p class="summary" id="summary">Waiting for the first readings.</p>
+        <div class="try" aria-labelledby="try-h">
+          <h2 id="try-h" class="try-h">Make something happen</h2>
+          <div class="try-buttons" id="try">
+            <button type="button" data-event="cooking" data-watch="pm25-kitchen"><span class="try-name">Cook dinner</span><span class="try-what">Smoke in the kitchen</span></button>
+            <button type="button" data-event="guests" data-watch="co2-living"><span class="try-name">Have friends over</span><span class="try-what">CO₂ climbs</span></button>
+            <button type="button" data-event="spray" data-watch="voc-living"><span class="try-name">Spray cleaner</span><span class="try-what">VOCs jump</span></button>
+            <button type="button" data-event="leak" data-watch="leak-bathroom"><span class="try-name">Spill water</span><span class="try-what">Under the sink</span></button>
+          </div>
+        </div>
+        <div class="hero-foot" id="hero-note">
+          <p class="stamp" id="stamp"></p>
+        </div>
       </div>
-      <p class="stamp" id="stamp"></p>
-    </section>
 
-    <section class="try" aria-labelledby="try-h">
-      <h2 id="try-h" class="try-h">Make something happen</h2>
-      <div class="try-buttons" id="try">
-        <button type="button" data-event="cooking" data-watch="pm25-kitchen"><span class="try-name">Cook dinner</span><span class="try-what">Smoke in the kitchen</span></button>
-        <button type="button" data-event="guests" data-watch="co2-living"><span class="try-name">Have friends over</span><span class="try-what">CO₂ climbs</span></button>
-        <button type="button" data-event="spray" data-watch="voc-living"><span class="try-name">Spray cleaner</span><span class="try-what">VOCs jump</span></button>
-        <button type="button" data-event="leak" data-watch="leak-bathroom"><span class="try-name">Spill water</span><span class="try-what">Under the sink</span></button>
-      </div>
-    </section>
-
-    <div class="grid">
-      <section class="card span-12 air-card" aria-labelledby="air-h">
-        <header class="card-head">
-          <h2 id="air-h">Air and water</h2>
-          <span class="erv" id="erv" role="status">Ventilation off</span>
-        </header>
-        <div class="strip" id="tiles"></div>
-      </section>
-
-      <section class="card span-8" aria-labelledby="plan-h">
-        <header class="card-head">
+      <div class="hero-plan">
+        <div class="plan-head">
           <h2 id="plan-h">Floor plan</h2>
-          <p class="card-meta">Select a room to see its history</p>
-        </header>
+          <p class="plan-hint">Select a room to see its history</p>
+        </div>
         <div class="plan-wrap">
           <svg id="plan" class="plan" viewBox="-6 -6 612 338" role="img" aria-label="Floor plan with live sensor readings"></svg>
         </div>
-      </section>
+      </div>
 
-      <section class="card span-4 alerts-card" aria-labelledby="alerts-h">
-        <header class="card-head">
-          <h2 id="alerts-h">Open alerts</h2>
-          <span class="count" id="alert-count">0</span>
-        </header>
-        <ul class="alerts" id="alerts"></ul>
-        <a class="card-foot" href="#log-h">See the full alert log</a>
-      </section>
+      <div class="readings">
+        <div class="readings-head">
+          <h2 id="air-h">Air and water</h2>
+          <span class="erv" id="erv" role="status">Ventilation off</span>
+        </div>
+        <div class="strip" id="tiles" aria-labelledby="air-h"></div>
+      </div>
+    </section>
 
-      <section class="card span-8" aria-labelledby="chart-h">
-        <header class="card-head">
+    <!-- Below the hero: a 12-column grid, 12px gaps, panels one tone step off the ground. 8 + 4 and 12 spans. -->
+    <div class="grid">
+      <section class="panel span-8 chart-panel reveal" id="history" aria-labelledby="chart-h">
+        <header class="panel-head">
           <div>
             <h2 id="chart-h">History</h2>
-            <p class="card-meta" id="chart-sub">Pick a sensor</p>
+            <p class="panel-meta" id="chart-sub">Pick a sensor</p>
           </div>
           <div class="segmented" role="group" aria-label="Time range">
             <button type="button" data-min="5">5 m</button>
@@ -105,36 +119,47 @@
         <div class="chart" id="chart"></div>
       </section>
 
-      <section class="card span-4 light-card" aria-labelledby="light-h">
-        <header class="card-head">
-          <div>
-            <h2 id="light-h">Living room light</h2>
-            <p class="card-meta" id="light-sub">Follows the time of day</p>
-          </div>
+      <section class="panel span-4 alerts-card reveal" aria-labelledby="alerts-h">
+        <header class="panel-head">
+          <h2 id="alerts-h">Open alerts</h2>
+          <span class="count" id="alert-count">0</span>
         </header>
-        <div class="light-now">
-          <span class="bulb" id="bulb" aria-hidden="true"></span>
-          <div>
-            <span class="light-k" id="light-k">–</span>
-            <span class="light-b" id="light-b"></span>
+        <ul class="alerts" id="alerts"></ul>
+        <a class="panel-foot" href="#log-h">See the full alert log</a>
+      </section>
+
+      <section class="panel span-12 light-card reveal" id="light" aria-labelledby="light-h">
+        <div class="light-read">
+          <header>
+            <h2 id="light-h">Living room light</h2>
+            <p class="panel-meta" id="light-sub">Follows the time of day</p>
+          </header>
+          <div class="light-now">
+            <span class="bulb" id="bulb" aria-hidden="true"></span>
+            <div>
+              <span class="light-k" id="light-k">–</span>
+              <span class="light-b" id="light-b"></span>
+            </div>
           </div>
         </div>
-        <svg class="daystrip" id="daystrip" tabindex="0" role="slider" aria-label="Preview the light at another time of day" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></svg>
-        <p class="light-key">Drag across the day to see the light at any hour. Each bar is half an hour: its colour is the colour temperature, its height the brightness.</p>
+        <div class="light-day">
+          <svg class="daystrip" id="daystrip" tabindex="0" role="slider" aria-label="Preview the light at another time of day" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></svg>
+          <p class="light-key">Drag across the day, or use the arrow keys, to see the light at any hour. Each bar is half an hour: its colour is the colour temperature, its height the brightness.</p>
+        </div>
       </section>
 
-      <section class="card span-4 sensors-card" aria-labelledby="sensors-h">
-        <header class="card-head">
+      <section class="panel span-4 sensors-card reveal" id="sensors" aria-labelledby="sensors-h">
+        <header class="panel-head">
           <h2 id="sensors-h">All sensors</h2>
-          <p class="card-meta" id="online-count"></p>
+          <p class="panel-meta" id="online-count"></p>
         </header>
-        <ul class="sensor-list" id="sensors"></ul>
+        <ul class="sensor-list" id="sensors-list"></ul>
       </section>
 
-      <section class="card span-8" aria-labelledby="log-h">
-        <header class="card-head">
+      <section class="panel span-8 reveal" aria-labelledby="log-h">
+        <header class="panel-head">
           <h2 id="log-h">Alert log</h2>
-          <p class="card-meta">Last 8 alerts</p>
+          <p class="panel-meta">Last 8 alerts</p>
         </header>
         <table class="log">
           <thead><tr><th scope="col">Opened</th><th scope="col">Sensor</th><th scope="col">What happened</th><th scope="col" class="num">Reading</th><th scope="col" class="num">Lasted</th></tr></thead>
@@ -142,20 +167,29 @@
         </table>
       </section>
 
-      <section class="card span-12" aria-labelledby="rules-h">
-        <header class="card-head">
+      <section class="panel span-12 reveal" id="rules" aria-labelledby="rules-h">
+        <header class="panel-head">
           <h2 id="rules-h">Rules</h2>
-          <p class="card-meta">From rules.yaml. An alert opens once its condition has held for the time shown.</p>
+          <p class="panel-meta">From rules.yaml. An alert opens once its condition has held for the time shown.</p>
         </header>
         <table class="rules">
           <thead><tr><th scope="col">Rule</th><th scope="col">Sensor</th><th scope="col">Opens when</th><th scope="col">Clears when</th><th scope="col">Then</th><th scope="col">Severity</th></tr></thead>
-          <tbody id="rules"></tbody>
+          <tbody id="rules-body"></tbody>
         </table>
       </section>
     </div>
+
+    <footer class="foot reveal">
+      <p class="foot-word" aria-hidden="true">Hearth</p>
+      <div class="foot-row">
+        <p>A local-first smart home: sensors over MQTT, a FastAPI rule engine, this page over a WebSocket.</p>
+        <a href="https://github.com/alok-kul5/hearth-iot">The code on GitHub</a>
+      </div>
+    </footer>
   </main>
 
   <div class="tooltip" id="tooltip" hidden></div>
+  <div class="cursor-label" id="cursor-label" aria-hidden="true">See its history</div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
