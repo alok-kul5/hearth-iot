@@ -20,6 +20,7 @@
   --control: #b3bdb7;
   --text: #1d2e30;
   --muted: #34474a;
+  --nav-ink: #22363a;
   --faint: #45585b;
   --data: #0f6a6c;
   --positive: #2f7a4f;
@@ -51,7 +52,7 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--ground); scroll-padding-top: 76px; }
+html { background: var(--ground); scroll-padding-top: 84px; }
 body {
   margin: 0; min-height: 100vh; color: var(--text); background: var(--ground);
   font: 400 15px/22px var(--sans); -webkit-font-smoothing: antialiased; font-kerning: normal;
@@ -70,18 +71,18 @@ a { color: inherit; }
 /* ── Top bar: on the ground, the wordmark in the landing page's italic ── */
 .topbar { position: sticky; top: 0; z-index: 30; background: var(--ground); transition: box-shadow 0.3s; }
 .topbar.scrolled { box-shadow: 0 1px 0 var(--rule); }
-.bar { max-width: var(--column); margin: 0 auto; padding: 0 calc(var(--m) + 16px); height: 64px; display: flex; align-items: center; gap: 20px; }
+.bar { max-width: var(--column); margin: 0 auto; padding: 0 calc(var(--m) + 16px); height: 72px; display: flex; align-items: center; gap: 22px; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; }
 .mark { width: 26px; height: 26px; color: var(--field); flex: none; }
 .brand-name { font: italic 400 27px/1 var(--serif); letter-spacing: -0.01em; }
-.scope { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.scope { color: var(--nav-ink); font-size: 16px; white-space: nowrap; }
 .jump { position: relative; display: flex; gap: 2px; margin: 0 auto; padding: 4px; border-radius: 999px; }
-.jump a { position: relative; z-index: 1; padding: 0 14px; height: 32px; display: grid; place-items: center; border-radius: 999px; font-size: 14px; color: var(--muted); text-decoration: none; transition: color 0.25s; }
+.jump a { position: relative; z-index: 1; padding: 0 16px; height: 36px; display: grid; place-items: center; border-radius: 999px; font-size: 16px; color: var(--nav-ink); text-decoration: none; transition: color 0.25s; }
 .jump a:hover, .jump a.on { color: var(--text); }
-.jump-pill { position: absolute; top: 4px; left: 0; height: 32px; width: 0; border-radius: 999px; background: var(--surface); opacity: 0; transition: transform 0.5s var(--ease), width 0.5s var(--ease), opacity 0.3s; }
-.pipeline { display: flex; align-items: baseline; gap: 10px; color: var(--muted); font-size: 13px; white-space: nowrap; }
-.rate { font-variant-numeric: tabular-nums; min-width: 108px; }
-.status { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.jump-pill { position: absolute; top: 4px; left: 0; height: 36px; width: 0; border-radius: 999px; background: var(--surface); opacity: 0; transition: transform 0.5s var(--ease), width 0.5s var(--ease), opacity 0.3s; }
+.pipeline { display: flex; align-items: baseline; gap: 10px; color: var(--nav-ink); font-size: 15px; white-space: nowrap; }
+.rate { font-variant-numeric: tabular-nums; min-width: 124px; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; white-space: nowrap; }
 .lamp { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
 .status.live .lamp { background: var(--positive); }
 .status.live .lamp::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--positive); opacity: 0; animation: ping 2.4s var(--ease) infinite; }
