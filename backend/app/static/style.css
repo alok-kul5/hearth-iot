@@ -19,8 +19,8 @@
   --rule: #d6dcd6;
   --control: #b3bdb7;
   --text: #1d2e30;
-  --muted: #4f5f62;
-  --faint: #5d6c6e;
+  --muted: #34474a;
+  --faint: #45585b;
   --data: #0f6a6c;
   --positive: #2f7a4f;
   --negative: #c4242a;
@@ -33,7 +33,7 @@
   --field-2: #2a443a;
   --field-3: #345143;
   --field-ink: #eef1ec;
-  --field-muted: #c3cdc6;
+  --field-muted: #dde4de;
   --field-line: rgba(238, 241, 236, 0.16);
   --field-hot: #ff9a8f;
   --field-warm: #f2c879;
