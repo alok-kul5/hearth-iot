@@ -160,7 +160,7 @@
 
     for (const room of Object.keys(haze)) {
       const red = overLimit(room);
-      ctx.fillStyle = red ? "rgba(196, 36, 42, 0.42)" : "rgba(20, 20, 20, 0.2)";
+      ctx.fillStyle = red ? "rgba(196, 36, 42, 0.42)" : "rgba(29, 46, 48, 0.22)";
       for (const p of haze[room]) {
         const [x, y] = toPx(p.x, p.y);
         ctx.globalAlpha = p.a;
@@ -171,11 +171,11 @@
 
     for (const p of smoke) {
       const [x, y] = toPx(p.x, p.y), k = p.life / p.max;
-      ctx.fillStyle = `rgba(90, 90, 90, ${0.22 * (1 - k)})`;
+      ctx.fillStyle = `rgba(79, 95, 98, ${0.22 * (1 - k)})`;
       ctx.beginPath(); ctx.arc(x, y, p.r * scale, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.strokeStyle = "rgba(29, 95, 191, 0.55)"; ctx.lineWidth = 1.5 * scale; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(15, 106, 108, 0.6)"; ctx.lineWidth = 1.5 * scale; ctx.lineCap = "round";
     for (const p of flow) {
       if (p.px == null) continue;
       const [x0, y0] = toPx(p.px - (p.x - p.px) * 3, p.py - (p.y - p.py) * 3), [x1, y1] = toPx(p.x, p.y);
@@ -187,10 +187,10 @@
     // The ERV fan: three blades in a ring.
     const f = FAN(), [fx, fy] = toPx(f.x, f.y), on = ervOn();
     ctx.save(); ctx.translate(fx, fy);
-    ctx.strokeStyle = on ? "#141414" : "#b9b6b1"; ctx.lineWidth = 1.2 * scale;
+    ctx.strokeStyle = on ? "#1d2e30" : "#b7c1bc"; ctx.lineWidth = 1.2 * scale;
     ctx.beginPath(); ctx.arc(0, 0, 13 * scale, 0, Math.PI * 2); ctx.stroke();
     ctx.rotate(fanAngle);
-    ctx.fillStyle = on ? "#141414" : "#b9b6b1";
+    ctx.fillStyle = on ? "#1d2e30" : "#b7c1bc";
     for (let i = 0; i < 3; i++) {
       ctx.rotate((Math.PI * 2) / 3);
       ctx.beginPath(); ctx.ellipse(0, -6 * scale, 3.2 * scale, 6 * scale, 0.5, 0, Math.PI * 2); ctx.fill();
@@ -198,15 +198,19 @@
     ctx.restore();
 
     const [sx, sy] = toPx(SINK.x, SINK.y);
+    const bath = ROOMS.bathroom, [bx, by] = toPx(bath.x, bath.y);
+    ctx.save();  // the ripples stay inside the bathroom
+    ctx.beginPath(); ctx.roundRect(bx, by, bath.w * scale, bath.h * scale, 14 * scale); ctx.clip();
     for (const r of ripples) {
       const k = r.t / 2.4;
-      ctx.strokeStyle = `rgba(29, 95, 191, ${0.7 * (1 - k)})`; ctx.lineWidth = 1.5 * scale;
+      ctx.strokeStyle = `rgba(15, 106, 108, ${0.7 * (1 - k)})`; ctx.lineWidth = 1.5 * scale;
       ctx.beginPath(); ctx.ellipse(sx, sy, (4 + k * 34) * scale, (2 + k * 14) * scale, 0, 0, Math.PI * 2); ctx.stroke();
     }
+    ctx.restore();
 
     for (const s of steps) {
       const [x, y] = toPx(s.x, s.y);
-      ctx.fillStyle = `rgba(20, 20, 20, ${0.35 * (1 - s.t / 1.6)})`;
+      ctx.fillStyle = `rgba(29, 46, 48, ${0.35 * (1 - s.t / 1.6)})`;
       ctx.beginPath(); ctx.ellipse(x, y, 3 * scale, 2 * scale, 0, 0, Math.PI * 2); ctx.fill();
     }
   }

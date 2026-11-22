@@ -1,6 +1,6 @@
 /*
  * Hearth: home overview.
- * Style: an achromatic ledger on a warm stone ground (a plastered wall, not a screen). The chrome is ink and
+ * Style: a ledger in the landing page's colours, on a pale stone ground. The chrome is ink and
  * greys; the one chart hue (blue) marks the reading you are looking at; red and amber appear only on a reading
  * that is out of range. The only other colour is the light itself, drawn in its real colour temperature.
  *
@@ -9,25 +9,26 @@
  */
 :root {
   color-scheme: light;
-  --ground: #f4f3f1;
+  /* The landing page's palette: a pale stone ground, sage tones, a teal-black ink and one teal. */
+  --ground: #f4f5f3;
   --surface: #ffffff;
-  --raised: #f4f3f1;
-  --active: #ebe9e6;
-  --border: #e6e4e0;
-  --rule: #f0eeeb;
-  --control: #d4d2ce;
-  --text: #0a0a0a;
-  --muted: #5f5f5f;
-  --faint: #6b6b6b;
-  --primary: #141414;
-  --data: #1d5fbf;            /* the one chart hue: the selected reading */
-  --positive: #2e7d32;
+  --raised: #eef1ed;
+  --active: #e3e8e3;
+  --border: #dfe4df;
+  --rule: #ebefea;
+  --control: #c4ccc7;
+  --text: #1d2e30;
+  --muted: #4f5f62;
+  --faint: #5d6c6e;
+  --primary: #1d2e30;
+  --data: #0f6a6c;            /* the one chart hue (the site's teal): the selected reading */
+  --positive: #2f7a4f;
   --negative: #c4242a;
   --warning: #92400e;
   --pill-negative-bg: #ffedea; --pill-negative-ink: #831c1e;
   --pill-warning-bg: #fffbeb;  --pill-warning-ink: #92400e;
-  --pill-neutral-bg: #eeeeee;  --pill-neutral-ink: #3d3d3d;
-  --grid: #e8e6e2;
+  --pill-neutral-bg: #e9ece8;  --pill-neutral-ink: #34474a;
+  --grid: #e3e8e3;
   --radius-card: 8px;
   --radius-control: 6px;
   --radius-chip: 4px;
@@ -250,7 +251,7 @@ h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
 .rules .r-name { font-weight: 500; }
 .rules .r-grey { color: var(--muted); }
 .log tbody tr, .rules tbody tr { transition: background 0.15s var(--ease); }
-.log tbody tr:hover, .rules tbody tr:hover { background: #faf9f8; }
+.log tbody tr:hover, .rules tbody tr:hover { background: #f8faf7; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -317,8 +318,8 @@ h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
 .try-name { font-size: 13.5px; font-weight: 500; line-height: 18px; }
 .try-what { font-size: 12px; line-height: 16px; color: var(--muted); }
 .try-buttons .primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-.try-buttons .primary .try-what { color: #c9c7c3; }
-.try-buttons .primary:hover { background: #2a2a2a; }
+.try-buttons .primary .try-what { color: #c3cdc6; }
+.try-buttons .primary:hover { background: #2c4244; }
 /* A sent event fills the button from the left, like a progress bar finishing. */
 .try-buttons button::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2px; background: var(--data); transform: scaleX(0); transform-origin: left; }
 .try-buttons button.busy::after { transform: scaleX(0.6); transition: transform 0.6s var(--ease); }
@@ -356,7 +357,7 @@ h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
 .tile.jump .t-value { animation: jump 0.9s var(--ease); }
 @keyframes jump { 0% { transform: scale(1); } 25% { transform: scale(1.08); } 100% { transform: scale(1); } }
 .card { transition: border-color 0.25s var(--ease); }
-.card:hover { border-color: #d9d6d1; }
+.card:hover { border-color: #cdd5cf; }
 .room { transition: transform 0.3s var(--ease); transform-box: fill-box; transform-origin: center; }
 .room:hover { transform: scale(1.01); }
 .room:active { transform: scale(0.99); }
