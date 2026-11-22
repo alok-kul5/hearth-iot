@@ -13,7 +13,7 @@
 (() => {
   "use strict";
   const VB = { x: -6, y: -6, w: 612, h: 338 };        // the plan SVG's viewBox
-  const HOB = { x: 452, y: 116 };                       // where the kitchen smoke rises from (clear of the text)
+  const HOB = { x: 459, y: 118 };                       // where the kitchen smoke rises from (clear of the text)
   const SINK = { x: 572, y: 104 };                      // under the bathroom sink
   const LAMP = { x: 250, y: 44 };                       // the living-room light
   const FAN = () => { const r = ROOMS.hallway; return { x: r.x + r.w - 74, y: r.y + r.h / 2 }; };
@@ -103,7 +103,7 @@
     if (Math.random() < smokeRate * dt) smoke.push({ x: HOB.x + rand(-6, 8), y: HOB.y, vx: rand(-2, 4), vy: rand(-26, -14), r: rand(3, 5), life: 0, max: rand(1.8, 2.8) });
     for (const p of smoke) {
       p.life += dt; p.r += dt * 3;
-      if (p.x < 440 && p.y < 128) { p.x = 440; p.vx = Math.abs(p.vx); }  // the kitchen is narrow: smoke keeps to its right edge
+      if (p.x < 450 && p.y < 128) { p.x = 450; p.vx = Math.abs(p.vx); }  // the kitchen is narrow: smoke keeps to its right edge
       if (on) { p.vx += (fan.x - p.x) * dt * 0.04; p.vy += (fan.y - p.y) * dt * 0.06; }
       p.x += p.vx * dt; p.y += p.vy * dt;
     }
