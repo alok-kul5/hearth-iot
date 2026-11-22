@@ -202,7 +202,7 @@ function renderPlan() {
       // A narrow room on a small plan keeps one short note, so nothing runs past its walls.
       const tight = C && r.w < 200;
       if (pm) extra.push({ s: pm, t: tight ? `PM2.5 ${fmtValue(pm).text}` : `PM2.5 ${fmtValue(pm).text} µg/m³` });
-      if (leak) extra.push({ s: leak, t: leak.last_value === 1 ? "Leak detected" : "No leaks" });
+      if (leak) extra.push({ s: leak, t: leak.last_value === 1 ? (tight ? "Wet" : "Leak detected") : (tight ? "Dry" : "No leaks") });
       if (door && primary !== door) extra.push({ s: door, t: `${door.sensor_id === "door-back" ? "Back door" : "Door"} ${fmtValue(door).text.toLowerCase()}` });
       if (off) extra.unshift({ s: primary, t: `Offline · last ${ago(primary.last_ts)}` });
       else if (!C && !extra.length && primary.last_ts) extra.push({ s: { sensor_id: "" }, t: `Updated ${ago(primary.last_ts)}`, faint: true });
